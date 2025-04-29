@@ -6,7 +6,7 @@
     </PropertyGroup>
 
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-        <Exec Command="copy /Y &quot;$(TargetPath)&quot; &quot;C:\Users\Javier\Desktop\Javier\Code\modding\TemplateMod\build&quot;" />
+        <Exec Command="copy /Y &quot;$(TargetPath)&quot; &quot;C:\Users\Javier\Desktop\Javier\Code\modding\PlaygroundMod\build&quot;" />
     </Target>
 
     <ItemGroup>

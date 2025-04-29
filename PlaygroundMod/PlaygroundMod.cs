@@ -5,7 +5,8 @@ using UnityEngine;
 using RWCustom;
 using BepInEx;
 using Debug = UnityEngine.Debug;
-using MonoMod.RuntimeDetour;  // Critical for 'On' hooks
+using MonoMod.RuntimeDetour;
+using System.Data.SqlClient;  // Critical for 'On' hooks
 
 #pragma warning disable CS0618
 
@@ -14,7 +15,7 @@ using MonoMod.RuntimeDetour;  // Critical for 'On' hooks
 
 namespace TemplateMod;
 
-[BepInPlugin("kaucrow.myrainworldmod", "My Rain World Mod", "1.0.0")]
+[BepInPlugin("kaucrow.playgroundmod", "Playground Mod", "1.0.0")]
 public partial class TemplateMod : BaseUnityPlugin
 {
     private void OnEnable()
@@ -32,8 +33,9 @@ public partial class TemplateMod : BaseUnityPlugin
         {
             IsInit = true;
 
-            //Your hooks go here
+            // Hooks go here
             On.Player.Update += PlayerOnUpdate;
+            On.Player.Die += PlayerOnDie;
         }
         catch (Exception ex)
         {
