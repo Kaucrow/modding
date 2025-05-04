@@ -1,20 +1,8 @@
 ﻿using System;
 using System.Security;
 using System.Security.Permissions;
-using UnityEngine;
-using RWCustom;
 using BepInEx;
-using Debug = UnityEngine.Debug;
-using MonoMod.RuntimeDetour;
-using System.Data.SqlClient;
-using UnityEngine.Rendering;
-using System.Runtime.Serialization;
-using IL.Menu.Remix.MixedUI;
 using HarmonyLib;
-using System.ComponentModel;
-using Menu.Remix.MixedUI;
-using On.Menu.Remix.MixedUI;
-using System.Runtime.Remoting.Messaging;
 using System.Xml;  // Critical for 'On' hooks
 
 #pragma warning disable CS0618

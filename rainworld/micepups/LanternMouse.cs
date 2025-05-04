@@ -1,17 +1,23 @@
 using UnityEngine;
 using System;
-using System.Collections.Generic;
 using HarmonyLib;
-using IL.Stove.Sample.Ownership;
-using System.ComponentModel;
 using System.Reflection;
-using BepInEx;
-using HarmonyLib.Tools;
-using BepInEx.Logging;
-using static StaticWorld;
-using System.CodeDom;
+using System.Runtime.CompilerServices;
 
 namespace MicePupsMod;
+
+public static class MicePupsManager
+{
+    public static ConditionalWeakTable<LanternMouse, PupData> _pupData = new();
+
+    public static bool IsPup(this LanternMouse mouse) 
+        => _pupData.TryGetValue(mouse, out _);
+
+    public static void SetPup(this LanternMouse mouse)
+        => _pupData.Add(mouse, new PupData());
+
+    public class PupData {} // Dummy data holder
+}
 
 public partial class MicePupsMod
 {
@@ -95,7 +101,7 @@ public partial class MicePupsMod
          var mouseTemplate = StaticWorld.GetCreatureTemplate(CreatureTemplate.Type.LanternMouse);
         if (mouseTemplate != null)
         {
-            // Modify relationship with other Lantern Mice
+            // Modify relationship with Slugcat
             mouseTemplate.relationships[(int)CreatureTemplate.Type.Slugcat] = 
                 new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 0.0f);
 
@@ -180,8 +186,10 @@ public static class MouseAI_Constructor_Patch
 		__instance.AddModule(new DenFinder(__instance, creature));
 		__instance.AddModule(new UtilityComparer(__instance));
 		__instance.AddModule(new RelationshipTracker(__instance, __instance.tracker));
-        __instance.AddModule(new FriendTracker(__instance));
-        __instance.AddModule(new ItemTracker(__instance, 10, 10, -1, -1, true));
+        if (__instance.mouse.IsPup()) {
+            __instance.AddModule(new FriendTracker(__instance));
+            __instance.AddModule(new ItemTracker(__instance, 10, 10, -1, -1, true));
+        }
 		__instance.utilityComparer.AddComparedModule(__instance.threatTracker, null, 1f, 1.1f);
 		__instance.utilityComparer.AddComparedModule(__instance.rainTracker, null, 1f, 1.1f);
 		__instance.behavior = MouseAI.Behavior.Idle;
@@ -190,28 +198,27 @@ public static class MouseAI_Constructor_Patch
     }
 }
 
-/*
-[HarmonyPatch(typeof(SLOracleBehaviorHasMark.MoonConversation))]
-[HarmonyPatch("AddEvents")]
-public static class MoonDialogue_Patch
+[HarmonyPatch]
+public static class Mouse_IVars_Patch
 {
-    private static void Postfix(SLOracleBehaviorHasMark.MoonConversation __instance)
+    static MethodBase TargetMethod()
     {
-        // Only modify if this is the "case 5" dialogue
-        if (__instance.State.neuronsLeft == 5)
+        return typeof(LanternMouse).GetMethod("GenerateIVars",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+    }
+
+    [HarmonyPostfix]
+    static void Postfix(LanternMouse __instance)
+    {
+        Console.WriteLine("Called Harmony LanternMouse GenerateIVars");
+        Console.WriteLine($"MousePups:{MicePupsManager._pupData}");
+
+        if (UnityEngine.Random.value > 0.5f)
         {
-            var events = __instance.events;
-
-            events.Clear();
-
-            events.Add(new Conversation.TextEvent(__instance, 0, "Lirilí Larilà.", 0));
-            events.Add(new Conversation.TextEvent(__instance, 0, "Elefante nel deserto che cammina qua e là.", 0));
-
-            if (__instance.State.playerEncounters > 0)
-            {
-                events.Add(new Conversation.TextEvent(__instance, 0, "Con la sua conchiglia y un orologio che fa tic tac, le spin del cactus mi fanno un attacco flashback.", 10));
-            }
+            __instance.SetPup();
+            Console.WriteLine("Mouse is pup");
+        } else {
+            Console.WriteLine("Mouse is not pup");
         }
     }
 }
-*/
