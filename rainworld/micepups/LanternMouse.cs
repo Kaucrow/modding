@@ -3,6 +3,7 @@ using System;
 using HarmonyLib;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 
 namespace MicePupsMod;
 
@@ -95,7 +96,8 @@ public partial class MicePupsMod
         }
     }
 
-    private void OnInitWorldRelationships(On.StaticWorld.orig_InitStaticWorldRelationships orig) {
+    private void OnInitWorldRelationships(On.StaticWorld.orig_InitStaticWorldRelationships orig)
+    {
         orig();
 
          var mouseTemplate = StaticWorld.GetCreatureTemplate(CreatureTemplate.Type.LanternMouse);
@@ -103,29 +105,106 @@ public partial class MicePupsMod
         {
             // Modify relationship with Slugcat
             mouseTemplate.relationships[(int)CreatureTemplate.Type.Slugcat] = 
-                new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 0.0f);
+                new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 0.5f);
 
         }
     }
 
-    private void OnItemTrackerUpdate(On.ItemTracker.orig_Update orig, ItemTracker self) {
+    private void OnItemTrackerUpdate(On.ItemTracker.orig_Update orig, ItemTracker self)
+    {
         orig(self);
 
         Logger.LogDebug($"Item tracker updated for creature: {self.AI.creature}");
         Logger.LogDebug($"Item count: {self.ItemCount}");
     }
 
-    private void OnAbstractCreatureInitiateAI(On.AbstractCreature.orig_InitiateAI orig, AbstractCreature self) {
+    private void OnAbstractCreatureInitiateAI(On.AbstractCreature.orig_InitiateAI orig, AbstractCreature self)
+    {
         orig(self);
 
         if (self.creatureTemplate.TopAncestor().type == CreatureTemplate.Type.LanternMouse)
         {
-            self.abstractAI.RealAI = new MouseAIWithItemTracker(self, self.world);
+            self.abstractAI.RealAI = new MouseAIExtended(self, self.world);
         }
     }
 }
 
-[HarmonyPatch(typeof(ArtificialIntelligence))]
+/*
+[HarmonyPatch(typeof(StaticWorld), nameof(StaticWorld.InitStaticWorld))]
+public static class StaticWorld_InitStaticWorld_Patch
+{
+    [HarmonyPostfix]
+    public static void Postfix()
+    {
+        // Access the static CreatureTemplate list via reflection
+        var templates = typeof(StaticWorld)
+            .GetField("creatureTemplates", BindingFlags.Static | BindingFlags.NonPublic)?
+            .GetValue(null) as List<CreatureTemplate>;
+        
+
+        if (templates != null)
+        {
+            var mouseTemplate = templates.Find(t => t.type == CreatureTemplate.Type.LanternMouse);
+            if (mouseTemplate != null)
+            {
+                mouseTemplate.socialMemory = true;
+                Console.WriteLine("Enabled LanternMouse social memory");
+            }
+        }
+    }
+}
+*/
+
+[HarmonyPatch(typeof(StaticWorld), nameof(StaticWorld.InitStaticWorld))]
+public static class StaticWorld_InitStaticWorld_Patch
+{
+    [HarmonyPostfix]
+    public static void Postfix()
+    {
+        try 
+        {
+            // Get the LanternMouse template from the array
+            var mouseIndex = CreatureTemplate.Type.LanternMouse.Index;
+            if (mouseIndex >= 0 && mouseIndex < StaticWorld.creatureTemplates.Length)
+            {
+                var mouseTemplate = StaticWorld.creatureTemplates[mouseIndex];
+                if (mouseTemplate != null)
+                {
+                    mouseTemplate.socialMemory = true;
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Template modification failed: {e}");
+        }
+    }
+}
+
+[HarmonyPatch(typeof(MouseAI), nameof(MouseAI.Update))]
+class MouseAI_Update_Patch
+{
+    [HarmonyPostfix]
+    static void Postfix(MouseAI __instance)
+    {
+        Console.WriteLine("Called Harmony MouseAI update");
+
+        // If the mouse is in a shelter and doesn't already have a friend
+        if (__instance.friendTracker.friend == null && __instance.mouse.room != null && __instance.mouse.room.abstractRoom.shelter)
+        {
+            for (int i = 0; i < __instance.mouse.room.game.Players.Count; i++)
+            {
+                if (__instance.mouse.room.game.Players[i].realizedCreature != null && __instance.mouse.room.game.Players[i].realizedCreature.room == __instance.mouse.room)
+                {
+                    SocialMemory.Relationship orInitiateRelationship = __instance.mouse.State.socialMemory.GetOrInitiateRelationship(__instance.mouse.room.game.Players[i].ID);
+                    orInitiateRelationship.InfluenceLike(1f);
+                    orInitiateRelationship.InfluenceTempLike(1f);
+                }
+            }
+        }
+    }
+}
+
 [HarmonyPatch(typeof(ArtificialIntelligence), "VisualContact", new[] { typeof(BodyChunk) })]
 class VisualContact_BodyChunk_Patch
 {
@@ -138,9 +217,9 @@ class VisualContact_BodyChunk_Patch
     }
 }
 
-public class MouseAIWithItemTracker : MouseAI, IUseItemTracker
+public class MouseAIExtended : MouseAI, IUseItemTracker, FriendTracker.IHaveFriendTracker
 {
-    public MouseAIWithItemTracker(AbstractCreature creature, World world) 
+    public MouseAIExtended(AbstractCreature creature, World world) 
         : base(creature, world) // Pass parameters to base class
     {
     }
@@ -157,6 +236,21 @@ public class MouseAIWithItemTracker : MouseAI, IUseItemTracker
             base.noiseTracker.mysteriousNoises += 20f;
             base.noiseTracker.mysteriousNoiseCounter = 200;
         }
+    }
+
+    public void GiftRecieved(SocialEventRecognizer.OwnedItemOnGround giftOfferedToMe)
+    {
+        SocialMemory.Relationship orInitiateRelationship = this.creature.realizedCreature.State.socialMemory.GetOrInitiateRelationship(giftOfferedToMe.owner.abstractCreature.ID);
+        if (giftOfferedToMe.owner is Player)
+        {
+            orInitiateRelationship.InfluenceLike(1f);
+            orInitiateRelationship.InfluenceTempLike(1f);
+        }
+        Console.WriteLine("Relationship:");
+        Console.WriteLine(new string[]
+        {
+            orInitiateRelationship.ToString()
+        });
     }
 }
 
@@ -213,7 +307,7 @@ public static class Mouse_IVars_Patch
         Console.WriteLine("Called Harmony LanternMouse GenerateIVars");
         Console.WriteLine($"MousePups:{MicePupsManager._pupData}");
 
-        if (UnityEngine.Random.value > 0.5f)
+        if (/*UnityEngine.Random.value*/ 1.0f > 0.5f)
         {
             __instance.SetPup();
             Console.WriteLine("Mouse is pup");
