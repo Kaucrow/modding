@@ -11,13 +11,40 @@ public static class MicePupsManager
 {
     public static ConditionalWeakTable<LanternMouse, PupData> _pupData = new();
 
-    public static bool IsPup(this LanternMouse mouse) 
-        => _pupData.TryGetValue(mouse, out _);
+    public static PupData GetPupData(this LanternMouse mouse)
+    {
+        _pupData.TryGetValue(mouse, out var data);
+        return data;
+    }
 
-    public static void SetPup(this LanternMouse mouse)
-        => _pupData.Add(mouse, new PupData());
+    public static void SetPupData(this LanternMouse mouse)
+        => _pupData.Add(mouse, new PupData(mouse.abstractCreature));
 
-    public class PupData {} // Dummy data holder
+    public class PupData {
+        public PupData(AbstractCreature creature)
+        {
+            this.creature = creature;
+        }
+
+        public AbstractCreature creature;
+
+        public MousePupAbstractAI abstractAI
+		{
+			get
+			{
+				return this.creature.abstractAI as MousePupAbstractAI;
+			}
+		}    
+    }
+}
+
+public class MousePupAbstractAI : AbstractCreatureAI
+{
+    public MousePupAbstractAI(World world, AbstractCreature parent) : base(world, parent)
+    {
+    }
+
+
 }
 
 public partial class MicePupsMod
@@ -86,10 +113,10 @@ public partial class MicePupsMod
         sLeaser.sprites[markGlowSprite].x = headPos.x - camPos.x; // <- CRUCIAL: Subtract camera position
         sLeaser.sprites[markGlowSprite].y = (headPos.y - camPos.y) + 50f; // 15 pixels above head
 
-        // 2. THEN call the original method (including __instance.DrawSprites)
+        // THEN call the original method (including __instance.DrawSprites)
         orig(self, sLeaser, rCam, timeStacker, camPos);
 
-        // 3. Optional post-processing
+        //  Optional post-processing
         if (self.owner is LanternMouse)
         {
             sLeaser.sprites[markSprite].MoveToFront();
@@ -190,7 +217,7 @@ class MouseAI_Update_Patch
         Console.WriteLine("Called Harmony MouseAI update");
 
         // If the mouse is in a shelter and doesn't already have a friend
-        if (__instance.friendTracker.friend == null && __instance.mouse.room != null && __instance.mouse.room.abstractRoom.shelter)
+        if (__instance.friendTracker.friend == null && __instance.mouse.room != null /*&& __instance.mouse.room.abstractRoom.shelter*/)
         {
             for (int i = 0; i < __instance.mouse.room.game.Players.Count; i++)
             {
@@ -200,6 +227,35 @@ class MouseAI_Update_Patch
                     orInitiateRelationship.InfluenceLike(1f);
                     orInitiateRelationship.InfluenceTempLike(1f);
                 }
+            }
+        }
+        if (__instance.friendTracker.friend != null && __instance.friendTracker.friend is Player && __instance.VisualContact(__instance.friendTracker.friend.firstChunk) && __instance.mouse.room == __instance.friendTracker.friend.room)
+        {
+            Communicate(__instance, __instance.friendTracker.friend as Player);
+        }
+    }
+
+    private static void Communicate(MouseAI __instance, Player player)
+    {
+        var data = __instance.mouse.GetPupData();
+
+        if (data == null) return;
+
+        Player.InputPackage[] input = player.input;
+        if (input[0].jmp && !input[1].jmp && player.bodyMode != Player.BodyModeIndex.Default)
+        {
+            // Jump while crouched
+            if (input[0].y == -1 && input[0].x == 0)
+            {
+                Console.WriteLine("Jump while crouched!");
+                return;
+            }
+            // Jump with up direction held
+            if (input[0].y == 1 && input[0].x == 0 && player.bodyMode != Player.BodyModeIndex.ClimbingOnBeam)
+            {
+                Console.WriteLine("Jump with up direction held!");
+                __instance.mouse.DetatchRope();
+                return;
             }
         }
     }
@@ -280,7 +336,7 @@ public static class MouseAI_Constructor_Patch
 		__instance.AddModule(new DenFinder(__instance, creature));
 		__instance.AddModule(new UtilityComparer(__instance));
 		__instance.AddModule(new RelationshipTracker(__instance, __instance.tracker));
-        if (__instance.mouse.IsPup()) {
+        if (__instance.mouse.GetPupData() != null) {
             __instance.AddModule(new FriendTracker(__instance));
             __instance.AddModule(new ItemTracker(__instance, 10, 10, -1, -1, true));
         }
@@ -309,7 +365,7 @@ public static class Mouse_IVars_Patch
 
         if (/*UnityEngine.Random.value*/ 1.0f > 0.5f)
         {
-            __instance.SetPup();
+            __instance.SetPupData();
             Console.WriteLine("Mouse is pup");
         } else {
             Console.WriteLine("Mouse is not pup");
