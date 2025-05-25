@@ -27,6 +27,7 @@ public static class MicePupsManager
         }
 
         public AbstractCreature creature;
+        public PhysicalObject grabTarget;
 
         public MousePupAbstractAI abstractAI
 		{
@@ -44,7 +45,7 @@ public class MousePupAbstractAI : AbstractCreatureAI
     {
     }
 
-
+    public bool isTamed;
 }
 
 public partial class MicePupsMod
@@ -66,22 +67,24 @@ public partial class MicePupsMod
         int markGlowSprite = sLeaser.sprites.Length - 2; // New index
 
         // Create the mark sprite
-        sLeaser.sprites[markSprite] = new FSprite("pixel", true) {
+        sLeaser.sprites[markSprite] = new FSprite("pixel", true)
+        {
             //shader = rCam.game.rainWorld.Shaders["FlatLight"],
             color = self.BodyColor,
             alpha = 1f,
             scale = 5f,
         };
-        rCam.ReturnFContainer("Foreground").AddChild(sLeaser.sprites[markSprite]); 
+        rCam.ReturnFContainer("Foreground").AddChild(sLeaser.sprites[markSprite]);
 
         // Create the mark sprite
-        sLeaser.sprites[markGlowSprite] = new FSprite("Futile_White", true) {
+        sLeaser.sprites[markGlowSprite] = new FSprite("Futile_White", true)
+        {
             shader = rCam.game.rainWorld.Shaders["FlatLight"],
             color = self.BodyColor,
             alpha = 0.5f,
             scale = 1f,
         };
-        rCam.ReturnFContainer("Foreground").AddChild(sLeaser.sprites[markGlowSprite]); 
+        rCam.ReturnFContainer("Foreground").AddChild(sLeaser.sprites[markGlowSprite]);
     }
 
     private void OnDraw(
@@ -100,8 +103,8 @@ public partial class MicePupsMod
 
         // Get interpolated head position (smooth between frames)
         Vector2 headPos = Vector2.Lerp(
-            self.bodyParts[mouseHead].lastPos, 
-            self.bodyParts[mouseHead].pos, 
+            self.bodyParts[mouseHead].lastPos,
+            self.bodyParts[mouseHead].pos,
             timeStacker
         );
 
@@ -127,11 +130,11 @@ public partial class MicePupsMod
     {
         orig();
 
-         var mouseTemplate = StaticWorld.GetCreatureTemplate(CreatureTemplate.Type.LanternMouse);
+        var mouseTemplate = StaticWorld.GetCreatureTemplate(CreatureTemplate.Type.LanternMouse);
         if (mouseTemplate != null)
         {
             // Modify relationship with Slugcat
-            mouseTemplate.relationships[(int)CreatureTemplate.Type.Slugcat] = 
+            mouseTemplate.relationships[(int)CreatureTemplate.Type.Slugcat] =
                 new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 0.5f);
 
         }
@@ -142,7 +145,6 @@ public partial class MicePupsMod
         orig(self);
 
         Logger.LogDebug($"Item tracker updated for creature: {self.AI.creature}");
-        Logger.LogDebug($"Item count: {self.ItemCount}");
     }
 
     private void OnAbstractCreatureInitiateAI(On.AbstractCreature.orig_InitiateAI orig, AbstractCreature self)
@@ -152,6 +154,26 @@ public partial class MicePupsMod
         if (self.creatureTemplate.TopAncestor().type == CreatureTemplate.Type.LanternMouse)
         {
             self.abstractAI.RealAI = new MouseAIExtended(self, self.world);
+        }
+    }
+}
+
+[HarmonyPatch(typeof(AbstractCreature))]
+[HarmonyPatch(MethodType.Constructor)]
+[HarmonyPatch(new Type[] {
+    typeof(World),
+    typeof(CreatureTemplate),
+    typeof(Creature),
+    typeof(WorldCoordinate),
+    typeof(EntityID)
+})]
+public static class AbstractCreature_Constructor_Patch
+{
+    public static void Postfix(AbstractCreature __instance, CreatureTemplate creatureTemplate)
+    {
+        if (creatureTemplate.type == CreatureTemplate.Type.LanternMouse) // Replace with your creature type check
+        {
+            __instance.abstractAI = new MousePupAbstractAI(__instance.world, __instance);
         }
     }
 }
@@ -216,6 +238,10 @@ class MouseAI_Update_Patch
     {
         Console.WriteLine("Called Harmony MouseAI update");
 
+        var data = __instance.mouse.GetPupData();
+
+        if (data == null) return;
+
         // If the mouse is in a shelter and doesn't already have a friend
         if (__instance.friendTracker.friend == null && __instance.mouse.room != null /*&& __instance.mouse.room.abstractRoom.shelter*/)
         {
@@ -229,9 +255,25 @@ class MouseAI_Update_Patch
                 }
             }
         }
-        if (__instance.friendTracker.friend != null && __instance.friendTracker.friend is Player && __instance.VisualContact(__instance.friendTracker.friend.firstChunk) && __instance.mouse.room == __instance.friendTracker.friend.room)
+        if (__instance.friendTracker.friend != null && __instance.friendTracker.friend is Player &&
+        __instance.VisualContact(__instance.friendTracker.friend.firstChunk) &&
+        __instance.mouse.room == __instance.friendTracker.friend.room)
         {
             Communicate(__instance, __instance.friendTracker.friend as Player);
+        }
+        if (__instance.friendTracker.friend != null && __instance.friendTracker.friend is Player)
+        {
+            data.abstractAI.isTamed = true;
+        }
+        if (HoldingThis(__instance, data.grabTarget))
+        {
+            data.grabTarget = null;
+        }
+        if (__instance.friendTracker.giftOfferedToMe != null && __instance.friendTracker.giftOfferedToMe.item != null)
+        {
+            __instance.mouse.ReleaseGrasp(0);
+            data.grabTarget = __instance.friendTracker.giftOfferedToMe.item;
+            Console.WriteLine("GIFT OFFERED!: " + data.grabTarget);
         }
     }
 
@@ -259,6 +301,18 @@ class MouseAI_Update_Patch
             }
         }
     }
+
+    private static bool HoldingThis(MouseAI __instance, PhysicalObject obj)
+    {
+        for (int i = 0; i < __instance.mouse.grasps.Length; i++)
+        {
+            if (__instance.mouse.grasps[i] != null && __instance.mouse.grasps[i].grabbed == obj)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 [HarmonyPatch(typeof(ArtificialIntelligence), "VisualContact", new[] { typeof(BodyChunk) })]
@@ -273,9 +327,9 @@ class VisualContact_BodyChunk_Patch
     }
 }
 
-public class MouseAIExtended : MouseAI, IUseItemTracker, FriendTracker.IHaveFriendTracker
+public class MouseAIExtended : MouseAI, IUseItemTracker, FriendTracker.IHaveFriendTracker, IReactToSocialEvents
 {
-    public MouseAIExtended(AbstractCreature creature, World world) 
+    public MouseAIExtended(AbstractCreature creature, World world)
         : base(creature, world) // Pass parameters to base class
     {
     }
@@ -307,6 +361,80 @@ public class MouseAIExtended : MouseAI, IUseItemTracker, FriendTracker.IHaveFrie
         {
             orInitiateRelationship.ToString()
         });
+    }
+
+    public void SocialEvent(SocialEventRecognizer.EventID ID, Creature subjectCrit, Creature objectCrit, PhysicalObject involvedItem)
+    {
+        if (
+            subjectCrit != null && objectCrit != null &&
+            subjectCrit.abstractCreature.rippleLayer != objectCrit.abstractCreature.rippleLayer &&
+            !subjectCrit.abstractCreature.rippleBothSides && !objectCrit.abstractCreature.rippleBothSides
+        )
+        {
+            return;
+        }
+
+        Tracker.CreatureRepresentation creatureRepresentation = base.tracker.RepresentationForObject(subjectCrit, false);
+        if (creatureRepresentation == null)
+        {
+            return;
+        }
+
+        Tracker.CreatureRepresentation creatureRepresentation2 = null;
+        bool flag = objectCrit == this.mouse;
+        if (!flag)
+        {
+            creatureRepresentation2 = base.tracker.RepresentationForObject(objectCrit, false);
+            if (creatureRepresentation2 == null)
+            {
+                return;
+            }
+        }
+
+        if (!flag && this.mouse.dead)
+        {
+            return;
+        }
+
+        if (creatureRepresentation2 != null && creatureRepresentation.TicksSinceSeen > 40 && creatureRepresentation2.TicksSinceSeen > 40)
+        {
+            return;
+        }
+
+        if (
+            (ID == SocialEventRecognizer.EventID.LethalAttack || ID == SocialEventRecognizer.EventID.Killing)
+            && objectCrit is Player && subjectCrit.abstractCreature.creatureTemplate.type != CreatureTemplate.Type.LanternMouse
+        )
+        {
+            for (int i = 0; i < base.relationshipTracker.relationships.Count; i++)
+            {
+                if (base.relationshipTracker.relationships[i].trackerRep != null && base.relationshipTracker.relationships[i].trackerRep.representedCreature != null && base.relationshipTracker.relationships[i].trackerRep.representedCreature.realizedCreature == subjectCrit)
+                {
+                    // TODO: Implement hurtAFriend
+                    //(base.relationshipTracker.relationships[i].state as SlugNPCAI.SlugNPCTrackState).hurtAFriend = true;
+                }
+            }
+        }
+
+        if (
+            ID == SocialEventRecognizer.EventID.ItemOffering &&
+            subjectCrit.abstractCreature.creatureTemplate.type == CreatureTemplate.Type.Slugcat &&
+            !(involvedItem is Player) && objectCrit == this.mouse
+        )
+        {
+            if (involvedItem.room.abstractRoom.name == "SL_AI" && involvedItem.firstChunk.pos.x > 1150f)
+            {
+                Console.WriteLine(new string[]
+                {
+                    "Reject gift due to moon proximity"
+                });
+                return;
+            }
+            else
+            {
+                base.friendTracker.giftOfferedToMe = involvedItem.room.socialEventRecognizer.ItemOwnership(involvedItem); 
+            }
+        } 
     }
 }
 
