@@ -45,6 +45,8 @@ public partial class MicePupsMod : BaseUnityPlugin
             // Apply Harmony patches
             _harmony.PatchAll();
 
+            MousePupBehaviors.Register();
+
             // Hooks go here
             On.Player.Update += PlayerOnUpdate;
             //On.Player.Die += PlayerOnDie;

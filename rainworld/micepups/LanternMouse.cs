@@ -156,6 +156,24 @@ public partial class MicePupsMod
             self.abstractAI.RealAI = new MouseAIExtended(self, self.world);
         }
     }
+
+    public static void LanternMouseCarryObject(LanternMouse __instance, bool eu)
+    {
+        if (__instance.graphicsModule != null)
+        {
+            MouseGraphics mouseGraphics = __instance.graphicsModule as MouseGraphics;
+            __instance.grasps[0].grabbedChunk.MoveFromOutsideMyUpdate(eu, __instance.bodyChunks[1].pos);
+        }
+        else
+        {
+            __instance.grasps[0].grabbedChunk.MoveFromOutsideMyUpdate(eu, __instance.bodyChunks[1].pos);
+        }
+        __instance.grasps[0].grabbedChunk.vel = __instance.mainBodyChunk.vel;
+        if (Vector2.Distance(__instance.grasps[0].grabbedChunk.pos, __instance.bodyChunks[1].pos) > 100f)
+        {
+            __instance.grasps[0].Release();
+        }
+    }
 }
 
 [HarmonyPatch(typeof(AbstractCreature))]
@@ -175,6 +193,16 @@ public static class AbstractCreature_Constructor_Patch
         {
             __instance.abstractAI = new MousePupAbstractAI(__instance.world, __instance);
         }
+    }
+}
+
+public static class MousePupBehaviors
+{
+    public static readonly MouseAI.Behavior GrabItem = new MouseAI.Behavior("GrabItem", true);
+    
+    public static void Register() 
+    {
+        // Dummy method to force static initialization
     }
 }
 
@@ -230,6 +258,19 @@ public static class StaticWorld_InitStaticWorld_Patch
     }
 }
 
+[HarmonyPatch(typeof(LanternMouse), nameof(LanternMouse.Update))]
+public static class LanternMouse_Update_Patch
+{   
+    [HarmonyPostfix]
+    static void Postfix(LanternMouse __instance, bool eu)
+    {
+        if (__instance.grasps[0] != null)
+        {
+            MicePupsMod.LanternMouseCarryObject(__instance, eu);
+        }
+    }
+}
+
 [HarmonyPatch(typeof(MouseAI), nameof(MouseAI.Update))]
 class MouseAI_Update_Patch
 {
@@ -274,6 +315,74 @@ class MouseAI_Update_Patch
             __instance.mouse.ReleaseGrasp(0);
             data.grabTarget = __instance.friendTracker.giftOfferedToMe.item;
             Console.WriteLine("GIFT OFFERED!: " + data.grabTarget);
+        }
+
+        if (__instance.currentUtility < 0.2f && data.grabTarget != null)
+        {
+            Console.WriteLine("Set behavior to GrabItem");
+            __instance.behavior = MousePupBehaviors.GrabItem;
+        }
+
+        if (__instance.behavior == MousePupBehaviors.GrabItem)
+        {
+            if (data.grabTarget != null)
+            {
+                __instance.creature.abstractAI.SetDestination(data.grabTarget.abstractPhysicalObject.pos);
+                Console.WriteLine("Set destination to: " + __instance.creature.abstractAI.destination);
+            }
+        }
+
+        if (data.grabTarget != null /*&& __instance.CanGrabItem(data.grabTarget)*/)
+        {
+            // Create a properly positioned debug line
+
+            /*
+            Vector2 startPos = __instance.mouse.mainBodyChunk.pos;
+            Vector2 endPos = data.grabTarget.firstChunk.pos;
+            float distance = Vector2.Distance(startPos, endPos);
+            float angle = Mathf.Atan2(endPos.y - startPos.y, endPos.x - startPos.x) * Mathf.Rad2Deg;
+
+            FSprite lineSprite = new FSprite("pixel")
+            {
+                scaleX = distance,
+                rotation = angle,
+                color = new Color(0, 1, 0),
+                anchorX = 0 // Critical for proper positioning
+            };
+
+            DebugSprite line = new DebugSprite(
+                startPos, // Starting position
+                lineSprite,
+                __instance.mouse.room
+            )
+            {
+            };
+
+            __instance.mouse.room.AddObject(line);
+            */
+
+            NPCForceGrab(__instance, data.grabTarget);
+        }
+    }
+
+    /*private bool CanGrabItem(MouseAI __instance, PhysicalObject obj)
+        {
+            return __instance.mouse.CanIPickThisUp(obj) && this.cat.NPCGrabCheck(obj);
+        }*/
+
+    static private void NPCForceGrab(MouseAI __instance, PhysicalObject obj)
+    {
+        //if (this.dontGrabStuff == 0)
+        {
+            for (int i = 0; i < __instance.mouse.grasps.Length; i++)
+            {
+                if (__instance.mouse.grasps[i] == null)
+                {
+                    //this.SlugcatGrab(obj, i);
+                    int chunkGrabbed = 0;
+                    __instance.mouse.Grab(obj, i, chunkGrabbed, Creature.Grasp.Shareability.CanNotShare, 0, false, false);
+                }
+            }
         }
     }
 
@@ -432,7 +541,12 @@ public class MouseAIExtended : MouseAI, IUseItemTracker, FriendTracker.IHaveFrie
             }
             else
             {
-                base.friendTracker.giftOfferedToMe = involvedItem.room.socialEventRecognizer.ItemOwnership(involvedItem); 
+                base.friendTracker.giftOfferedToMe = involvedItem.room.socialEventRecognizer.ItemOwnership(involvedItem);
+
+                if (this.dangle != null)
+                {
+                    this.mouse.DetatchRope();
+                }
             }
         } 
     }
