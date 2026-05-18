@@ -63,6 +63,9 @@
 		<Reference Include="Assembly-CSharp">
 			<HintPath>C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\Assembly-CSharp.dll</HintPath>
 		</Reference>
+		<Reference Include="Unity.Mathematics">
+		  <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\Unity.Mathematics.dll</HintPath>
+		</Reference>
 		<Reference Include="UnityEngine">
 			<HintPath>C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\Managed\UnityEngine.dll</HintPath>
 		</Reference>

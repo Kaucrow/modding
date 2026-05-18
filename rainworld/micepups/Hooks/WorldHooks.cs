@@ -28,8 +28,8 @@ namespace MicePups.Hooks
             if (mouseTemplate != null)
             {
                 // Modify relationship with Slugcat
-                mouseTemplate.relationships[(int)CreatureTemplate.Type.Slugcat] =
-                    new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 0.5f);
+                //mouseTemplate.relationships[(int)CreatureTemplate.Type.Slugcat] =
+                //    new CreatureTemplate.Relationship(CreatureTemplate.Relationship.Type.Ignores, 0.5f);
 
             }
         }

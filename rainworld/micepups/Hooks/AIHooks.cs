@@ -6,26 +6,120 @@ namespace MicePups.Hooks
     {
         internal static void Apply()
         {
-            On.AbstractCreature.InitiateAI += OnAbstractCreatureInitiateAI;
+            On.ArtificialIntelligence.DynamicRelationship_CreatureRepresentation_AbstractCreature += ArtificialIntelligence_DynamicRelationship;
+            On.ArtificialIntelligence.StaticRelationship += ArtificialIntelligence_StaticRelationship;
+            On.MouseAI.ReconsiderDanglePos += MouseAI_ReconsiderDanglePos;
         }
 
         internal static void Remove()
         {
-            On.AbstractCreature.InitiateAI -= OnAbstractCreatureInitiateAI;
+            On.ArtificialIntelligence.DynamicRelationship_CreatureRepresentation_AbstractCreature -= ArtificialIntelligence_DynamicRelationship;
+            On.ArtificialIntelligence.StaticRelationship -= ArtificialIntelligence_StaticRelationship;
+            On.MouseAI.ReconsiderDanglePos -= MouseAI_ReconsiderDanglePos;
         }
 
-        private static void OnAbstractCreatureInitiateAI(
-            On.AbstractCreature.orig_InitiateAI orig,
-            AbstractCreature self
+        private static CreatureTemplate.Relationship ArtificialIntelligence_DynamicRelationship(
+            On.ArtificialIntelligence.orig_DynamicRelationship_CreatureRepresentation_AbstractCreature orig,
+            ArtificialIntelligence self,
+            Tracker.CreatureRepresentation rep,
+            AbstractCreature absCrit
         )
         {
-            orig(self);
-
-            if (self.creatureTemplate.TopAncestor().type == CreatureTemplate.Type.LanternMouse)
+            // DEBUG
+            /*
+            if (self is MousePupAI)
             {
-                // Injects all of the code you wrote in MouseAIExtended into the creature!
-                self.abstractAI.RealAI = new MouseAIExtended(self, self.world);
+                // Replicate the first step of the vanilla method to see what data we have
+                Tracker.CreatureRepresentation debugRep = rep ?? self.tracker?.RepresentationForCreature(absCrit, false);
+
+                if (debugRep == null)
+                {
+                    UnityEngine.Debug.Log($"[MousePupAI] No representation found for {absCrit?.creatureTemplate.type}. Vanilla will use StaticRelationship.");
+                }
+                else if (debugRep.dynamicRelationship != null)
+                {
+                    UnityEngine.Debug.Log($"[MousePupAI] SUCCESS! Using dynamic relationship for {debugRep.representedCreature.creatureTemplate.type}. Current Type: {debugRep.dynamicRelationship.currentRelationship.type}");
+                }
+                else
+                {
+                    UnityEngine.Debug.Log($"[MousePupAI] WARNING: Representation exists for {debugRep.representedCreature.creatureTemplate.type}, but dynamicRelationship is NULL! Vanilla will use StaticRelationship.");
+                }
             }
+            */
+
+            // Call the original method
+            CreatureTemplate.Relationship rel = orig(self, rep, absCrit);
+
+            if (self is MousePupAI pupAI && absCrit != null && absCrit.creatureTemplate.type == CreatureTemplate.Type.Slugcat)
+            {
+                // Check if the pup has developed a strong liking to this player in its social memory
+                if (pupAI.creature.state.socialMemory != null)
+                {
+                    SocialMemory.Relationship playerRel = pupAI.creature.state.socialMemory.GetRelationship(absCrit.ID);
+
+                    // If the pup's relationship level crosses the 0.5f threshold
+                    if (playerRel != null && playerRel.like > 0.5f)
+                    {
+                        // Dynamic upgrade to the relationship status
+                        rel.type = CreatureTemplate.Relationship.Type.SocialDependent;
+                        rel.intensity = 1f;
+                        return rel;
+                    }
+                }
+
+                // If no friendship exists yet, fall back to the static relationship
+                rel.type = CreatureTemplate.Relationship.Type.Ignores;
+                rel.intensity = 0f;
+            }
+
+            return rel;
+        }
+
+        private static CreatureTemplate.Relationship ArtificialIntelligence_StaticRelationship(
+            On.ArtificialIntelligence.orig_StaticRelationship orig,
+            ArtificialIntelligence self,
+            AbstractCreature absCrit
+        )
+        {
+            CreatureTemplate.Relationship rel = orig(self, absCrit);
+
+            if (self is MousePupAI && absCrit != null && absCrit.creatureTemplate.type == CreatureTemplate.Type.Slugcat)
+            {
+                rel.type = CreatureTemplate.Relationship.Type.Ignores;
+                rel.intensity = 0f;
+            }
+
+            return rel;
+        }
+
+        private static void MouseAI_ReconsiderDanglePos(
+            On.MouseAI.orig_ReconsiderDanglePos orig,
+            MouseAI self
+        )
+        {
+            if (self is not MousePupAI)
+            {
+                orig(self);
+                return;
+            }
+
+            // If holding food or moving towards an item, skip checking for ceilings
+            if (self.behavior == MousePupAI.Behavior.GrabItem)
+            {
+                self.dangle = null;
+                return;
+            }
+            else if (
+                self.mouse.grasps != null && self.mouse.grasps.Length > 0 &&
+                self.mouse.grasps[0] != null && self.mouse.grasps[0].grabbed is IPlayerEdible
+            )
+            {
+                self.dangle = null;
+                return;
+            }
+
+            // Otherwise, look for ceilings normally
+            orig(self);
         }
     }
 }

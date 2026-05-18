@@ -1,24 +1,26 @@
-﻿using MicePupsMod;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Runtime.CompilerServices;
 
 namespace MicePups.Data
 {
     internal static class MicePupsManager
     {
-        public static ConditionalWeakTable<LanternMouse, PupData> _pupData = new();
+        public static ConditionalWeakTable<AbstractCreature, MousePupData> _pupData = new();
 
-        public static PupData GetPupData(this LanternMouse mouse)
+        public static MousePupData GetPupData(this AbstractCreature absCrit)
         {
-            _pupData.TryGetValue(mouse, out var data);
+            _pupData.TryGetValue(absCrit, out var data);
             return data;
         }
 
+        public static MousePupData GetPupData(this LanternMouse mouse)
+        {
+            return mouse.abstractCreature?.GetPupData();
+        }
+
         public static void SetPupData(this LanternMouse mouse)
-            => _pupData.Add(mouse, new PupData(mouse.abstractCreature));
+        {
+            _pupData.Remove(mouse.abstractCreature);
+            _pupData.Add(mouse.abstractCreature, new MousePupData(mouse.abstractCreature));
+        }
     }
 }

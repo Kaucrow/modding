@@ -18,7 +18,7 @@ public partial class MicePupsMod : BaseUnityPlugin
 {
     public static MicePupsMod Instance { get; private set; }
     private Harmony _harmony;
-    private bool IsInit;
+    private static bool IsInit;
 
     private void OnEnable()
     {
@@ -62,9 +62,6 @@ public partial class MicePupsMod : BaseUnityPlugin
         try
         {
             IsInit = true;
-
-            // Initialize custom behavior structures
-            MousePupBehaviors.Register();
 
             // Register all standard On hooks
             RegisterHooks();

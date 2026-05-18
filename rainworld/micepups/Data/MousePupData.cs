@@ -8,15 +8,16 @@ using MicePups.AI;
 
 namespace MicePups.Data
 {
-    internal class PupData
+    internal class MousePupData
     {
-        public PupData(AbstractCreature creature)
+        public MousePupData(AbstractCreature creature)
         {
             this.creature = creature;
         }
 
         public AbstractCreature creature;
         public PhysicalObject grabTarget;
+        public PhysicalObject grabbed;
 
         public MousePupAbstractAI abstractAI
         {
