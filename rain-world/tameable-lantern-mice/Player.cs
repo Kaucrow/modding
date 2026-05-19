@@ -4,9 +4,9 @@ using System.IO;
 using RWCustom;
 using MoreSlugcats;
 
-namespace MicePupsMod;
+namespace MouseFriendsMod;
 
-public partial class MicePupsMod 
+public partial class MouseFriendsMod 
 {
     private void PlayerOnDie(On.Player.orig_Die orig, Player self)
     {

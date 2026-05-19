@@ -3,27 +3,26 @@ using System.Security;
 using System.Security.Permissions;
 using BepInEx;
 using HarmonyLib;
-using MicePups.Hooks;
-using MicePups.AI;
+using MouseFriends.Hooks;
 
 #pragma warning disable CS0618
 
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
-namespace MicePupsMod;
+namespace MouseFriendsMod;
 
-[BepInPlugin("kaucrow.micepups", "Mice Pups", "1.0.0")]
-public partial class MicePupsMod : BaseUnityPlugin
+[BepInPlugin("kaucrow.tameablelanternmice", "Tameable Lantern Mice", "1.0.0")]
+public partial class MouseFriendsMod : BaseUnityPlugin
 {
-    public static MicePupsMod Instance { get; private set; }
+    public static MouseFriendsMod Instance { get; private set; }
     private Harmony _harmony;
     private static bool IsInit;
 
     private void OnEnable()
     {
         Instance = this;
-        _harmony = new Harmony("com.kaucrow.micepups");
+        _harmony = new Harmony("com.kaucrow.tameablelanternmice");
 
         MicePups.Logs.UnityLogger.Initialize();
 
@@ -53,7 +52,10 @@ public partial class MicePupsMod : BaseUnityPlugin
         }
     }
 
-    private void RainWorldOnOnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
+    private void RainWorldOnOnModsInit(
+        On.RainWorld.orig_OnModsInit orig,
+        RainWorld self
+    )
     {
         orig(self);
 
@@ -82,6 +84,7 @@ public partial class MicePupsMod : BaseUnityPlugin
         AIHooks.Apply();
         CreatureHooks.Apply();
         WorldHooks.Apply();
+        HUDHooks.Apply();
     }
 
     private void UnregisterHooks()
@@ -93,5 +96,6 @@ public partial class MicePupsMod : BaseUnityPlugin
         AIHooks.Remove();
         CreatureHooks.Remove();
         WorldHooks.Remove();
+        HUDHooks.Remove();
     }
 }

@@ -2,9 +2,9 @@
 using System;
 using HarmonyLib;
 using System.Reflection;
-using MicePups.AI;
+using MouseFriends.AI;
 
-namespace MicePups.Hooks
+namespace MouseFriends.Hooks
 {
     internal class WorldHooks
     {
@@ -49,7 +49,7 @@ namespace MicePups.Hooks
             {
                 if (creatureTemplate.type == CreatureTemplate.Type.LanternMouse)    // Replace with the creature type check
                 {
-                    __instance.abstractAI = new MousePupAbstractAI(__instance.world, __instance);
+                    __instance.abstractAI = new MouseFriendAbstractAI(__instance.world, __instance);
                 }
             }
         }

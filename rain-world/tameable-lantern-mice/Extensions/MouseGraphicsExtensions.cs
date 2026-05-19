@@ -2,7 +2,7 @@
 using System.Reflection;
 using UnityEngine;
 
-namespace MicePups.Extensions
+namespace MouseFriends.Extensions
 {
     internal static class MouseGraphicsExtensions
     {

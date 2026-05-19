@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace MicePups.Logs
@@ -11,7 +10,7 @@ namespace MicePups.Logs
         private static readonly int maxLines = 15;
         private static string currentLogText = "";
 
-        public static void Initialize()
+        internal static void Initialize()
         {
             // Only initialize once
             if (instance == null)
@@ -52,7 +51,7 @@ namespace MicePups.Logs
             style.fontSize = 12;
             style.wordWrap = false;
 
-            // Draw a black "drop shadow" slightly offset
+            // Draw a black drop shadow slightly offset
             style.normal.textColor = Color.black;
             GUI.Label(new Rect(22, 22, 1000, 800), currentLogText, style);
 

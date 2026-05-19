@@ -1,11 +1,11 @@
-﻿using MicePups.Data;
-using MicePups.Extensions;
+﻿using MouseFriends.Data;
+using MouseFriends.Extensions;
 using System;
 using UnityEngine;
 
-namespace MicePups.AI
+namespace MouseFriends.AI
 {
-    internal class MousePupAI : MouseAI, IUseItemTracker, FriendTracker.IHaveFriendTracker, IReactToSocialEvents
+    internal class MouseFriendAI : MouseAI, IUseItemTracker, FriendTracker.IHaveFriendTracker, IReactToSocialEvents
     {
         // DEBUG
         /*
@@ -19,7 +19,7 @@ namespace MicePups.AI
             public Behavior(string value, bool register = false) : base(value, register) {}
         }
 
-        public MousePupAI(AbstractCreature creature, World world) : base(creature, world)
+        public MouseFriendAI(AbstractCreature creature, World world) : base(creature, world)
         {
             if (this.mouse.State.socialMemory == null)
             {
@@ -56,9 +56,9 @@ namespace MicePups.AI
             this.dangle = null;
             */
 
-            var data = this.mouse.GetPupData();
+            var data = this.mouse.GetFriendData();
 
-            if (data.grabTarget != null)
+            if (data.GrabTarget != null)
             {
                 // Force an immediate detachment if it's currently on a rope
                 if (this.mouse.ropeAttatchedPos != null && this.IsSafeToDrop())
@@ -106,11 +106,9 @@ namespace MicePups.AI
                 }
             }*/
 
-            // Communication & Taming
+            // Communication
             if (this.friendTracker?.friend is Player friendPlayer)
             {
-                data.abstractAI.isTamed = true;
-
                 if (this.VisualContact(friendPlayer.firstChunk) && this.mouse.room == friendPlayer.room)
                 {
                     this.Communicate(friendPlayer);
@@ -142,14 +140,14 @@ namespace MicePups.AI
                 UnityEngine.Debug.Log("Gift offered: " + this.friendTracker.giftOfferedToMe.item);
                 UnityEngine.Debug.Log("Current utility: " + this.currentUtility);
                 this.mouse.ReleaseGrasp(0);
-                data.grabTarget = this.friendTracker.giftOfferedToMe.item;
+                data.GrabTarget = this.friendTracker.giftOfferedToMe.item;
             }
 
             // Behavior State Switching
-            if (data.grabTarget != null && base.threatTracker.Utility() < 0.2f && base.rainTracker.Utility() < 0.2f)
+            if (data.GrabTarget != null && base.threatTracker.Utility() < 0.2f && base.rainTracker.Utility() < 0.2f)
             {
                 // First, check if the gift reachable
-                if (base.pathFinder.CoordinateReachableAndGetbackable(data.grabTarget.abstractPhysicalObject.pos))
+                if (base.pathFinder.CoordinateReachableAndGetbackable(data.GrabTarget.abstractPhysicalObject.pos))
                 {
                     // Switch behavior so the pathfinder starts moving us to the gift
                     UnityEngine.Debug.Log("Switching to GrabItem behavior. Utility: " + this.currentUtility);
@@ -157,10 +155,10 @@ namespace MicePups.AI
                 }
                 else
                 {
-                    if (data.grabTarget.firstChunk.vel.magnitude < 1f)
+                    if (data.GrabTarget.firstChunk.vel.magnitude < 1f)
                     {
                         UnityEngine.Debug.Log("Gift has landed but is unreachable! Ignoring it.");
-                        data.grabTarget = null;
+                        data.GrabTarget = null;
                         if (this.friendTracker != null) this.friendTracker.giftOfferedToMe = null;
                     }
                     else
@@ -171,18 +169,18 @@ namespace MicePups.AI
             }
 
             // Execute GrabItem Behavior
-            if (this.behavior == Behavior.GrabItem && data.grabTarget != null)
+            if (this.behavior == Behavior.GrabItem && data.GrabTarget != null)
             {
-                UnityEngine.Debug.Log("Attempting to grab: " + data.grabTarget);
+                UnityEngine.Debug.Log("Attempting to grab: " + data.GrabTarget);
 
                 // Walk towards the item
-                this.creature.abstractAI.SetDestination(data.grabTarget.abstractPhysicalObject.pos);
+                this.creature.abstractAI.SetDestination(data.GrabTarget.abstractPhysicalObject.pos);
 
                 // Check if the mouse pup is physically close enough to grab it
-                if (Vector2.Distance(this.mouse.mainBodyChunk.pos, data.grabTarget.firstChunk.pos) < 40f)
+                if (Vector2.Distance(this.mouse.mainBodyChunk.pos, data.GrabTarget.firstChunk.pos) < 40f)
                 {
-                    UnityEngine.Debug.Log("Close enough! Grabbing: " + data.grabTarget);
-                    this.NPCForceGrab(data.grabTarget);
+                    UnityEngine.Debug.Log("Close enough! Grabbing: " + data.GrabTarget);
+                    this.NPCForceGrab(data.GrabTarget);
 
                     // Tell the tracker we successfully took the gift
                     if (this.friendTracker?.giftOfferedToMe != null)
@@ -193,8 +191,8 @@ namespace MicePups.AI
 
                     // Reset the target and go back to normal behavior
                     this.behavior = Behavior.Idle;
-                    data.grabbed = data.grabTarget;
-                    data.grabTarget = null;
+                    data.Grabbed = data.GrabTarget;
+                    data.GrabTarget = null;
                 }
             }
         }
@@ -237,7 +235,7 @@ namespace MicePups.AI
 
         private void Communicate(Player player)
         {
-            var data = this.mouse.GetPupData();
+            var data = this.mouse.GetFriendData();
             if (data == null) return;
 
             Player.InputPackage[] input = player.input;

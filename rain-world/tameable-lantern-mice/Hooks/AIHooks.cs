@@ -1,6 +1,6 @@
-﻿using MicePups.AI;
+﻿using MouseFriends.AI;
 
-namespace MicePups.Hooks
+namespace MouseFriends.Hooks
 {
     internal static class AIHooks
     {
@@ -50,7 +50,7 @@ namespace MicePups.Hooks
             // Call the original method
             CreatureTemplate.Relationship rel = orig(self, rep, absCrit);
 
-            if (self is MousePupAI pupAI && absCrit != null && absCrit.creatureTemplate.type == CreatureTemplate.Type.Slugcat)
+            if (self is MouseFriendAI pupAI && absCrit != null && absCrit.creatureTemplate.type == CreatureTemplate.Type.Slugcat)
             {
                 // Check if the pup has developed a strong liking to this player in its social memory
                 if (pupAI.creature.state.socialMemory != null)
@@ -83,7 +83,7 @@ namespace MicePups.Hooks
         {
             CreatureTemplate.Relationship rel = orig(self, absCrit);
 
-            if (self is MousePupAI && absCrit != null && absCrit.creatureTemplate.type == CreatureTemplate.Type.Slugcat)
+            if (self is MouseFriendAI && absCrit != null && absCrit.creatureTemplate.type == CreatureTemplate.Type.Slugcat)
             {
                 rel.type = CreatureTemplate.Relationship.Type.Ignores;
                 rel.intensity = 0f;
@@ -97,14 +97,14 @@ namespace MicePups.Hooks
             MouseAI self
         )
         {
-            if (self is not MousePupAI)
+            if (self is not MouseFriendAI)
             {
                 orig(self);
                 return;
             }
 
             // If holding food or moving towards an item, skip checking for ceilings
-            if (self.behavior == MousePupAI.Behavior.GrabItem)
+            if (self.behavior == MouseFriendAI.Behavior.GrabItem)
             {
                 self.dangle = null;
                 return;

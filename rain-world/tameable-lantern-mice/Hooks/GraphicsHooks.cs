@@ -1,12 +1,8 @@
 ﻿using UnityEngine;
-using Unity.Mathematics;
 using System;
-using HarmonyLib;
-using System.Reflection;
-using MonoMod.Utils;
-using MicePups.AI;
+using MouseFriends.AI;
 
-namespace MicePups.Hooks
+namespace MouseFriends.Hooks
 {
     internal static class GraphicsHooks
     {
@@ -95,7 +91,7 @@ namespace MicePups.Hooks
                         }
 
                         // --- State Checks ---
-                        bool isEating = mouse.AI.behavior == MousePupAI.Behavior.Eat;
+                        bool isEating = mouse.AI.behavior == MouseFriendAI.Behavior.Eat;
                         bool isDangling = mouse.ropeAttatchedPos != null;
                         bool isClimbing = mouse.room != null && mouse.room.aimap.getAItile(mouse.mainBodyChunk.pos).acc == AItile.Accessibility.Climb;
 
@@ -227,7 +223,7 @@ namespace MicePups.Hooks
                     }
 
                     // --- State Checks ---
-                    bool isEating = mouse.AI.behavior == MousePupAI.Behavior.Eat;
+                    bool isEating = mouse.AI.behavior == MouseFriendAI.Behavior.Eat;
                     bool isDangling = mouse.ropeAttatchedPos != null;
 
                     Vector2 offset = Vector2.zero;

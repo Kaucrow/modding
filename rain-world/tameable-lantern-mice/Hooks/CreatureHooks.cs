@@ -1,12 +1,12 @@
 ﻿using HarmonyLib;
-using MicePups.AI;
-using MicePups.Data;
-using MicePups.Extensions;
+using MouseFriends.AI;
+using MouseFriends.Data;
+using MouseFriends.Extensions;
 using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace MicePups.Hooks
+namespace MouseFriends.Hooks
 {
     internal class CreatureHooks
     {
@@ -15,12 +15,14 @@ namespace MicePups.Hooks
             // Hook into InitiateAI instead of the physical creature constructor
             On.AbstractCreature.InitiateAI += AbstractCreature_InitiateAI;
             On.LanternMouse.Update += LanternMouse_Update;
+            //On.BodyChunk.MoveFromOutsideMyUpdate += BodyChunk_MoveFromOutsideMyUpdate;
         }
 
         internal static void Remove()
         {
             On.AbstractCreature.InitiateAI -= AbstractCreature_InitiateAI;
             On.LanternMouse.Update -= LanternMouse_Update;
+            //On.BodyChunk.MoveFromOutsideMyUpdate -= BodyChunk_MoveFromOutsideMyUpdate;
         }
 
         private static void AbstractCreature_InitiateAI(
@@ -34,11 +36,11 @@ namespace MicePups.Hooks
             // Check if this abstract creature is a Lantern Mouse
             if (self.creatureTemplate.type == CreatureTemplate.Type.LanternMouse)
             {
-                if (self.GetPupData() != null)
+                if (self.GetFriendData() != null)
                 {
                     UnityEngine.Debug.Log("Replacing Vanilla MouseAI with MousePupAI inside InitiateAI");
 
-                    self.abstractAI.RealAI = new MousePupAI(self, self.world);
+                    self.abstractAI.RealAI = new MouseFriendAI(self, self.world);
                 }
             }
         }
@@ -70,6 +72,10 @@ namespace MicePups.Hooks
             // Call the original method
             orig(self, eu);
 
+            var friendData = self.GetFriendData();
+
+            if (friendData == null) return;
+
             // Check if the mouse has a grasps array and is actually holding something
             if (self.grasps != null && self.grasps.Length > 0 && self.grasps[0] != null)
             {
@@ -88,45 +94,47 @@ namespace MicePups.Hooks
                     // In an else block because we don't want to try to eat if the item is stuck on geometry and we're trying to drop it
 
                     // Check if the held item is edible, and if so, take a bite every 40 frames 
-                    if (self.grasps[0].grabbed is IPlayerEdible foodItem)
+                    if (self.grasps[0].grabbed is IPlayerEdible foodItem && foodItem is PhysicalObject physFood)
                     {
                         if (self.room != null && self.room.game.clock % 40 == 0)
                         {
-                            // Remember how many bites were left before we take a bite
                             int bitesBefore = foodItem.BitesLeft;
+
+                            // Trigger graphics
+                            if (self.graphicsModule != null)
+                            {
+                                (self.graphicsModule as MouseGraphics)?.BiteFly(0);
+                            }
+
+                            bool hitPlayerCastCrash = false;
 
                             try
                             {
-                                // If the mouse has a graphics module, trigger the bite animation.
-                                if (self.graphicsModule != null)
-                                {
-                                    (self.graphicsModule as MouseGraphics)?.BiteFly(0);
-                                }
-
-                                // Call the BitByPlayer method on the food item.
-                                // It will play its proper custom sound and decrement its own bites.
-                                // On the final bite, it will throw a NullReferenceException when looking for a Player.
+                                // Execute the vanilla method (Plays sounds, changes sprite, decrements bites)
                                 foodItem.BitByPlayer(self.grasps[0], eu);
                             }
-                            catch
+                            catch (NullReferenceException)
                             {
-                                // Silently swallow the exception
+                                hitPlayerCastCrash = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                UnityEngine.Debug.Log($"Unexpected eating error: {ex}");
                             }
 
-                            // Because the exception aborted the very end of the BitByPlayer method, 
-                            // the item never got to run grasp.Release() or this.Destroy(). 
-                            // We finish the job manually if it was the last bite.
-                            if (bitesBefore == 1)
+                            // If the item is fully eaten, tame the mouse and destroy the food item
+                            if (bitesBefore <= 1 || hitPlayerCastCrash)
                             {
+                                friendData.IsTamed = true;
+
+                                // TODO: Update the mouse's stats based on the food eaten
+
                                 if (self.grasps[0] != null)
                                 {
                                     self.grasps[0].Release();
                                 }
 
-                                if (foodItem is PhysicalObject physObj)
-                                {
-                                    physObj.Destroy();
-                                }
+                                physFood.Destroy();
                             }
                         }
                     }
