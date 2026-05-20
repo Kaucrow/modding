@@ -36,7 +36,7 @@ namespace MouseFriends.Hooks
             // Check if this abstract creature is a Lantern Mouse
             if (self.creatureTemplate.type == CreatureTemplate.Type.LanternMouse)
             {
-                if (self.GetFriendData() != null)
+                if (self.IsMouseFriend())
                 {
                     UnityEngine.Debug.Log("Replacing Vanilla MouseAI with MousePupAI inside InitiateAI");
 
@@ -71,10 +71,8 @@ namespace MouseFriends.Hooks
         {
             // Call the original method
             orig(self, eu);
-
-            var friendData = self.GetFriendData();
-
-            if (friendData == null) return;
+            
+            if (self.GetFriendData() is not MouseFriendData friendData) return;
 
             // Check if the mouse has a grasps array and is actually holding something
             if (self.grasps != null && self.grasps.Length > 0 && self.grasps[0] != null)
@@ -83,60 +81,51 @@ namespace MouseFriends.Hooks
                 self.grasps[0].grabbedChunk.MoveFromOutsideMyUpdate(eu, self.bodyChunks[0].pos);
                 self.grasps[0].grabbedChunk.vel = self.mainBodyChunk.vel;
 
-                // Failsafe: Drop the item if it gets stuck on geometry
-                if (Vector2.Distance(self.grasps[0].grabbedChunk.pos, self.bodyChunks[0].pos) > 100f)
-                {
-                    self.grasps[0].Release();
-                }
-                else
-                {
-                    // --- EATING LOGIC ---
-                    // In an else block because we don't want to try to eat if the item is stuck on geometry and we're trying to drop it
+            
+                // --- EATING LOGIC ---
+                // In an else block because we don't want to try to eat if the item is stuck on geometry and we're trying to drop it
 
-                    // Check if the held item is edible, and if so, take a bite every 40 frames 
-                    if (self.grasps[0].grabbed is IPlayerEdible foodItem && foodItem is PhysicalObject physFood)
+                // Check if the held item is edible, and if so, take a bite every 40 frames 
+                if (
+                    self.grasps[0].grabbed is IPlayerEdible foodItem && self.room.game.clock % 40 == 0 &&
+                    foodItem is PhysicalObject physFood && self.room != null
+                )
+                {
+                    int bitesBefore = foodItem.BitesLeft;
+
+                    // Trigger graphics
+                    if (self.graphicsModule != null)
                     {
-                        if (self.room != null && self.room.game.clock % 40 == 0)
+                        (self.graphicsModule as MouseGraphics)?.BiteFly(0);
+                    }
+
+                    bool hitPlayerCastCrash = false;
+
+                    try
+                    {
+                        // Execute the vanilla method (Plays sounds, changes sprite, decrements bites)
+                        foodItem.BitByPlayer(self.grasps[0], eu);
+                    }
+                    catch (NullReferenceException)
+                    {
+                        hitPlayerCastCrash = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        UnityEngine.Debug.Log($"Unexpected eating error: {ex}");
+                    }
+
+                    // If the item is fully eaten, tame the mouse and destroy the food item
+                    if (bitesBefore <= 1 || hitPlayerCastCrash)
+                    {
+                        self.ObjectEaten(foodItem);
+
+                        if (self.grasps[0] != null)
                         {
-                            int bitesBefore = foodItem.BitesLeft;
-
-                            // Trigger graphics
-                            if (self.graphicsModule != null)
-                            {
-                                (self.graphicsModule as MouseGraphics)?.BiteFly(0);
-                            }
-
-                            bool hitPlayerCastCrash = false;
-
-                            try
-                            {
-                                // Execute the vanilla method (Plays sounds, changes sprite, decrements bites)
-                                foodItem.BitByPlayer(self.grasps[0], eu);
-                            }
-                            catch (NullReferenceException)
-                            {
-                                hitPlayerCastCrash = true;
-                            }
-                            catch (Exception ex)
-                            {
-                                UnityEngine.Debug.Log($"Unexpected eating error: {ex}");
-                            }
-
-                            // If the item is fully eaten, tame the mouse and destroy the food item
-                            if (bitesBefore <= 1 || hitPlayerCastCrash)
-                            {
-                                friendData.IsTamed = true;
-
-                                // TODO: Update the mouse's stats based on the food eaten
-
-                                if (self.grasps[0] != null)
-                                {
-                                    self.grasps[0].Release();
-                                }
-
-                                physFood.Destroy();
-                            }
+                            self.grasps[0].Release();
                         }
+
+                        physFood.Destroy();
                     }
                 }
             }

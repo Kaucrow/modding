@@ -1,6 +1,7 @@
 ﻿using HUD;
 using MonoMod.RuntimeDetour;
 using MoreSlugcats;
+using MouseFriends.Data;
 using MouseFriends.Extensions;
 using RWCustom;
 using System.Collections.Generic;
@@ -134,14 +135,9 @@ namespace MouseFriends.Hooks
             // the player's food values with the mouse's food values.
             if (self.GetMouseData(out var meterData) && meterData.DummyPlayer?.playerState != null)
             {
-                var friendData = meterData.Mouse.GetFriendData();
-                if (friendData == null)
-                {
-                    orig(self);
-                    return;
-                }
+                if (meterData.Mouse.GetFriendData() is not MouseFriendData friendData) return;
 
-                int currentFood = friendData.CurrentFood;
+                int currentFood = friendData.FoodInStomach;
 
                 int realPlayerFood = meterData.DummyPlayer.playerState.foodInStomach;
                 meterData.DummyPlayer.playerState.foodInStomach = currentFood;
@@ -303,26 +299,15 @@ namespace MouseFriends.Hooks
                 }
             }
 
-            // State-Swap trick to construct the meter safely
-            int realMaxFood = mainPlayer.slugcatStats.maxFood;
-            int realSurvivalLimit = mainPlayer.slugcatStats.foodToHibernate;
+            if (mouseFriend.GetFriendData() is not MouseFriendData friendData) return;
 
-            mainPlayer.slugcatStats.maxFood = 4;
-            mainPlayer.slugcatStats.foodToHibernate = 2;
-
+            // Initialize and register the new UI element
             FoodMeter mouseMeter = ConstructMouseFoodMeter(hud, stackIndex);
-
-            mainPlayer.slugcatStats.maxFood = realMaxFood;
-            mainPlayer.slugcatStats.foodToHibernate = realSurvivalLimit;
-
-            // Register and initialize the new UI element
             mouseMeter.RegisterAsMouseMeter(mouseFriend, mainPlayer, stackIndex);
 
-            var friendData = mouseFriend.GetFriendData();
-            if (friendData != null)
             {
-                mouseMeter.lastCount = friendData.CurrentFood;
-                mouseMeter.NewShowCount(friendData.CurrentFood);
+                mouseMeter.lastCount = friendData.FoodInStomach;
+                mouseMeter.NewShowCount(friendData.FoodInStomach);
             }
 
             hud.AddPart(mouseMeter);

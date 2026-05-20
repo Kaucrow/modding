@@ -13,7 +13,8 @@ namespace MouseFriends.Data
         public bool IsTamed { get; set; }
         public PhysicalObject GrabTarget { get; set; }
         public PhysicalObject Grabbed { get; set;  }
-        public int CurrentFood { get; }
+        public int FoodInStomach { get; set; } = 0;
+        public int MaxFoodInStomach { get; set; } = 3;
 
         public MouseFriendAbstractAI abstractAI
         {

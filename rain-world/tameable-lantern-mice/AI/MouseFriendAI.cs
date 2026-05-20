@@ -56,7 +56,7 @@ namespace MouseFriends.AI
             this.dangle = null;
             */
 
-            var data = this.mouse.GetFriendData();
+            if (this.mouse.GetFriendData() is not MouseFriendData data) return;
 
             if (data.GrabTarget != null)
             {
@@ -235,8 +235,7 @@ namespace MouseFriends.AI
 
         private void Communicate(Player player)
         {
-            var data = this.mouse.GetFriendData();
-            if (data == null) return;
+            if (this.mouse.GetFriendData() is not MouseFriendData data) return;
 
             Player.InputPackage[] input = player.input;
             if (input[0].jmp && !input[1].jmp && player.bodyMode != Player.BodyModeIndex.Default)
