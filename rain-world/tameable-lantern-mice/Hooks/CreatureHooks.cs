@@ -57,9 +57,8 @@ namespace MouseFriends.Hooks
             [HarmonyPostfix]
             static void Postfix(LanternMouse __instance)
             {
-                // Force it to be a pup for testing
-                __instance.SetPupData();
-                Console.WriteLine("Mouse is pup");
+                // Force it to be a friend for testing
+                __instance.SetFriendData();
             }
         }
 
@@ -81,7 +80,6 @@ namespace MouseFriends.Hooks
                 self.grasps[0].grabbedChunk.MoveFromOutsideMyUpdate(eu, self.bodyChunks[0].pos);
                 self.grasps[0].grabbedChunk.vel = self.mainBodyChunk.vel;
 
-            
                 // --- EATING LOGIC ---
                 // In an else block because we don't want to try to eat if the item is stuck on geometry and we're trying to drop it
 

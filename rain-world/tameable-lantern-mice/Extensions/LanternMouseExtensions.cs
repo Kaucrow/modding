@@ -41,6 +41,12 @@ namespace MouseFriends.Extensions
 
             data.FoodInStomach += amount;
         }
+        
+        internal static bool IsFull(this LanternMouse mouse)
+        {
+            MouseFriendData data = mouse.GetFriendData();
+            return data.FoodInStomach >= data.MaxFoodInStomach;
+        }
 
         internal static bool IsMouseFriend(this AbstractCreature absCrit)
         {
@@ -63,7 +69,7 @@ namespace MouseFriends.Extensions
             return mouse.abstractCreature?.GetFriendData();
         }
 
-        internal static void SetPupData(this LanternMouse mouse)
+        internal static void SetFriendData(this LanternMouse mouse)
         {
             friendData.Remove(mouse.abstractCreature);
             friendData.Add(mouse.abstractCreature, new MouseFriendData(mouse.abstractCreature));

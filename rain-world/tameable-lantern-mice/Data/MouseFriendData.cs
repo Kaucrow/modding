@@ -1,22 +1,32 @@
-﻿using MouseFriends.AI;
+﻿using RWCustom;
+using System.Collections.Generic;
+using MouseFriends.AI;
 
 namespace MouseFriends.Data
 {
     internal class MouseFriendData
     {
-        public MouseFriendData(AbstractCreature creature)
+        internal MouseFriendData(AbstractCreature creature)
         {
             this.Creature = creature;
         }
 
-        public AbstractCreature Creature { get; }
-        public bool IsTamed { get; set; }
-        public PhysicalObject GrabTarget { get; set; }
-        public PhysicalObject Grabbed { get; set;  }
-        public int FoodInStomach { get; set; } = 0;
-        public int MaxFoodInStomach { get; set; } = 3;
+        internal AbstractCreature Creature { get; }
+        internal bool IsTamed { get; set; }
+        internal WorldCoordinate Destination { get; set; }
+        internal PhysicalObject GrabTarget { get; set; }
+        internal int FoodInStomach { get; set; } = 0;
+        internal int MaxFoodInStomach { get; set; } = 3;
+        
+        internal int ThrowAtTarget { get; set; } = 0;
+        internal List<IntVector2> _CachedFloodFillList { get; set; } = new List<IntVector2>(50);
+        internal List<IntVector2> PreviousAttackPositions { get; set; } = new List<IntVector2>();
+        internal List<IntVector2> List { get; set; } = new List<IntVector2>(50);
+        internal WorldCoordinate AttackPos { get; set; }
+        internal WorldCoordinate TestThrowPos { get; set; }
+        internal int ChangeAttackPositionDelay { get; set; } = 0;
 
-        public MouseFriendAbstractAI abstractAI
+        internal MouseFriendAbstractAI abstractAI
         {
             get
             {
