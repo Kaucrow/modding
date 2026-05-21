@@ -12,12 +12,13 @@ namespace MouseFriends.Data
         }
 
         internal AbstractCreature Creature { get; }
-        internal bool IsTamed { get; set; }
         internal WorldCoordinate Destination { get; set; }
         internal PhysicalObject GrabTarget { get; set; }
         internal int FoodInStomach { get; set; } = 0;
         internal int MaxFoodInStomach { get; set; } = 3;
-        
+        internal float FollowCloseness { get; set; }
+        internal int ToldToPlay { get; set; } = 0;
+
         internal int ThrowAtTarget { get; set; } = 0;
         internal List<IntVector2> _CachedFloodFillList { get; set; } = new List<IntVector2>(50);
         internal List<IntVector2> PreviousAttackPositions { get; set; } = new List<IntVector2>();
@@ -25,6 +26,8 @@ namespace MouseFriends.Data
         internal WorldCoordinate AttackPos { get; set; }
         internal WorldCoordinate TestThrowPos { get; set; }
         internal int ChangeAttackPositionDelay { get; set; } = 0;
+
+        internal bool IsFull => FoodInStomach >= MaxFoodInStomach;
 
         internal MouseFriendAbstractAI abstractAI
         {

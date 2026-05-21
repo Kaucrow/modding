@@ -1,9 +1,10 @@
 ﻿namespace MouseFriends.AI
 {
-    public class MouseFriendAbstractAI : AbstractCreatureAI
+    internal class MouseFriendAbstractAI : AbstractCreatureAI
     {
-        public MouseFriendAbstractAI(World world, AbstractCreature parent) : base(world, parent)
-        {
-        }
+        internal bool IsTamed { get; set; } = false;
+        internal WorldCoordinate? ToldToStay { get; set; } = null;
+
+        internal MouseFriendAbstractAI(World world, AbstractCreature parent) : base(world, parent) {}
     }
 }

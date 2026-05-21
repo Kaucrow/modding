@@ -36,11 +36,11 @@ namespace MouseFriends.Hooks
             // Check if this abstract creature is a Lantern Mouse
             if (self.creatureTemplate.type == CreatureTemplate.Type.LanternMouse)
             {
-                if (self.IsMouseFriend())
+                if (self.GetFriendData(out MouseFriendData data))
                 {
                     UnityEngine.Debug.Log("Replacing Vanilla MouseAI with MousePupAI inside InitiateAI");
 
-                    self.abstractAI.RealAI = new MouseFriendAI(self, self.world);
+                    self.abstractAI.RealAI = new MouseFriendAI(self, self.world, data);
                 }
             }
         }
@@ -70,7 +70,7 @@ namespace MouseFriends.Hooks
         {
             // Call the original method
             orig(self, eu);
-            
+
             if (self.GetFriendData() is not MouseFriendData friendData) return;
 
             // Check if the mouse has a grasps array and is actually holding something
@@ -83,7 +83,7 @@ namespace MouseFriends.Hooks
                 // --- EATING LOGIC ---
                 // In an else block because we don't want to try to eat if the item is stuck on geometry and we're trying to drop it
 
-                // Check if the held item is edible, and if so, take a bite every 40 frames 
+                // Check if the held item is edible, and if so, take a bite every 40 frames
                 if (
                     self.grasps[0].grabbed is IPlayerEdible foodItem && self.room.game.clock % 40 == 0 &&
                     foodItem is PhysicalObject physFood && self.room != null

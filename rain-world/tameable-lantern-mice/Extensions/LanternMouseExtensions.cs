@@ -10,7 +10,19 @@ namespace MouseFriends.Extensions
         internal static bool IsBefriended(this LanternMouse mouse)
         {
             MouseFriendData data = mouse.GetFriendData();
-            return data.IsTamed;
+            return data.abstractAI.IsTamed;
+        }
+
+        internal static void GrabItem(this LanternMouse mouse, PhysicalObject obj)
+        {
+            for (int i = 0; i < mouse.grasps.Length; i++)
+            {
+                if (mouse.grasps[i] == null)
+                {
+                    mouse.Grab(obj, i, 0, Creature.Grasp.Shareability.CanNotShare, 0, false, false);
+                    break;
+                }
+            }
         }
 
         internal static void Sit(this LanternMouse mouse)
@@ -22,9 +34,6 @@ namespace MouseFriends.Extensions
 
         internal static void ObjectEaten(this LanternMouse mouse, IPlayerEdible _)
         {
-            MouseFriendData data = mouse.GetFriendData();
-
-            data.IsTamed = true;
             mouse.AddFood(1);
         }
 
@@ -41,21 +50,11 @@ namespace MouseFriends.Extensions
 
             data.FoodInStomach += amount;
         }
-        
+
         internal static bool IsFull(this LanternMouse mouse)
         {
             MouseFriendData data = mouse.GetFriendData();
             return data.FoodInStomach >= data.MaxFoodInStomach;
-        }
-
-        internal static bool IsMouseFriend(this AbstractCreature absCrit)
-        {
-            return friendData.TryGetValue(absCrit, out var _);
-        }
-
-        internal static bool IsMouseFriend(this LanternMouse mouse)
-        {
-            return friendData.TryGetValue(mouse.abstractCreature, out var _);
         }
 
         internal static MouseFriendData GetFriendData(this AbstractCreature absCrit)
@@ -67,6 +66,11 @@ namespace MouseFriends.Extensions
         internal static MouseFriendData GetFriendData(this LanternMouse mouse)
         {
             return mouse.abstractCreature?.GetFriendData();
+        }
+
+        internal static bool GetFriendData(this AbstractCreature absCrit, out MouseFriendData data)
+        {
+            return friendData.TryGetValue(absCrit, out data);
         }
 
         internal static void SetFriendData(this LanternMouse mouse)

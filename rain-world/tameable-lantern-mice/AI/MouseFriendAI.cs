@@ -1,10 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using UnityEngine;
-using RWCustom;
-using MoreSlugcats;
+﻿using MoreSlugcats;
 using MouseFriends.Data;
 using MouseFriends.Extensions;
+using RWCustom;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
 
 namespace MouseFriends.AI
 {
@@ -15,18 +16,22 @@ namespace MouseFriends.AI
         private WorldCoordinate? travelTo = null;
         */
 
-        public MouseFriendAI(AbstractCreature creature, World world) : base(creature, world)
+        private readonly MouseFriendData data;
+
+        public MouseFriendAI(AbstractCreature creature, World world, MouseFriendData data) : base(creature, world)
         {
+            this.data = data;
+
             if (this.mouse.State.socialMemory == null)
             {
                 this.mouse.State.socialMemory = new SocialMemory();
             }
-            
+
             // Add the AI modules
             base.AddModule(new FriendTracker(this));
             base.AddModule(new ItemTracker(this, 10, 10, -1, -1, true));
             base.AddModule(new PreyTracker(this, 10, 1f, 5f, -1f, 0.5f));
-            
+
             // Customize the threat tracker
             FloatTweener.FloatTween threatSmoother = new FloatTweener.FloatTweenUpAndDown(
                 new FloatTweener.FloatTweenBasic(FloatTweener.TweenType.Lerp, 0.5f),
@@ -62,13 +67,11 @@ namespace MouseFriends.AI
             var prevRunSpeed = this.mouse.runSpeed;
 
             base.Update();
-            
+
             // DEBUG
             /*
             this.dangle = null;
             */
-
-            if (this.mouse.GetFriendData() is not MouseFriendData data) return;
 
             if (data.GrabTarget != null)
             {
@@ -92,7 +95,7 @@ namespace MouseFriends.AI
                 UnityEngine.Debug.Log("-------------------------");
             }
             */
-            
+
             // DEBUG
             /*
             if (this.travelTo != null)
@@ -126,10 +129,7 @@ namespace MouseFriends.AI
             }
 
             // If the grabbed object is food, sit so we can eat it
-            if (
-                this.mouse.grasps != null && this.mouse.grasps.Length > 0 &&
-                this.mouse.grasps[0] != null && this.mouse.grasps[0].grabbed is IPlayerEdible
-            )
+            if (this.mouse.grasps?.Length > 0 && this.mouse.grasps[0]?.grabbed is IPlayerEdible)
             {
                 this.behavior = Behavior.Eat;
 
@@ -154,8 +154,44 @@ namespace MouseFriends.AI
                 data.GrabTarget = this.friendTracker.giftOfferedToMe.item;
             }
 
+            // If we have a friend and it's a player, we're tamed
+            if (base.friendTracker.friend != null && base.friendTracker.friend is Player)
+            {
+                this.data.abstractAI.IsTamed = true;
+            }
+
+            // Define follow closeness based on our relationship with our friend, if we have one
+            if (base.friendTracker.friend != null)
+            {
+                this.DefineFollowCloseness();
+            }
+
+            // If our grab target is currently being held by us, unset the grab target
+            if (this.HoldingThis(this.data.GrabTarget))
+            {
+                this.data.GrabTarget = null;
+            }
+
+            // If we're currently on the player's head or being held by the player,
+            // drop any held item, unset ToldToStay, unset giftOfferedToMe, and update ToldToPlay.
+            if (this.behavior == Behavior.OnHead || this.behavior == Behavior.HeldByPlayer)
+            {
+                this.mouse.ReleaseGrasp(0);
+                this.data.abstractAI.ToldToStay = null;
+                base.friendTracker.giftOfferedToMe = null;
+                this.data.ToldToPlay = Mathf.Min(this.data.ToldToPlay, -2000);
+            }
+
+            // If we have a gift offer, accept the gift by setting it as our grab target
+            // and releasing any held item.
+            if (base.friendTracker.giftOfferedToMe?.item != null)
+            {
+                this.mouse.ReleaseGrasp(0);
+                this.data.GrabTarget = base.friendTracker.giftOfferedToMe.item;
+            }
+
             // Behavior state switching
-            this.DecideBehavior(ref data);
+            this.DecideBehavior();
 
             // If we're not in any of the vanilla behaviors, undo the modifications those behaviors apply in the vanilla update
             if (this.behavior != Behavior.Idle && this.behavior != Behavior.Flee && this.behavior != Behavior.EscapeRain)
@@ -166,56 +202,223 @@ namespace MouseFriends.AI
                 this.wantToSleep = false;
             }
 
-            this.behavior = Behavior.Attacking;
-            // Update according to the current behavior
-            if (this.behavior == Behavior.OnHead)
+            // If we have a grab target and it's something we can grab, grab it
+            if (this.data.GrabTarget != null && this.CanGrabItem(this.data.GrabTarget))
             {
-                // TODO
-            }
-            else if (this.behavior == Behavior.BeingHeld && this.mouse.IsBefriended())
-            {
-                // TODO
-            }
-            else if (this.behavior == Behavior.GrabItem && data.GrabTarget != null)
-            {
-                UnityEngine.Debug.Log("Attempting to grab: " + data.GrabTarget);
+                this.mouse.GrabItem(this.data.GrabTarget);
+                this.data.GrabTarget = null;
 
-                // Walk towards the item
-                data.Destination = data.GrabTarget.abstractPhysicalObject.pos;
-
-                // Check if the mouse pup is physically close enough to grab it
-                if (Vector2.Distance(this.mouse.mainBodyChunk.pos, data.GrabTarget.firstChunk.pos) < 40f)
+                // If the item was a gift offered by our friend, tell the tracker we successfully took the gift
+                if (this.friendTracker?.giftOfferedToMe != null)
                 {
-                    UnityEngine.Debug.Log("Close enough! Grabbing: " + data.GrabTarget);
-                    this.NPCForceGrab(data.GrabTarget);
-
-                    // Tell the tracker we successfully took the gift
-                    if (this.friendTracker?.giftOfferedToMe != null)
-                    {
-                        this.GiftRecieved(this.friendTracker.giftOfferedToMe);
-                        this.friendTracker.giftOfferedToMe = null;  // Clear the offer
-                    }
-
-                    // Reset the target and go back to normal behavior
-                    this.behavior = Behavior.Idle;
-                    data.GrabTarget = null;
+                    this.GiftRecieved(this.friendTracker.giftOfferedToMe);
+                    this.friendTracker.giftOfferedToMe = null;  // Clear the offer
                 }
             }
-            else if (this.behavior == Behavior.Attacking)
+
+            // If we're being held by the player and are tamed, keep the current position
+            // TODO: Handle held but not tamed
+            if (this.behavior == Behavior.HeldByPlayer && this.mouse.IsBefriended())
             {
-                this.AttackUpdate(
-                    ref data,
-                    this.AttackingThreat() ?
-                        base.threatTracker.mostThreateningCreature :
-                        base.preyTracker.MostAttractivePrey
+                this.creature.abstractAI.SetDestination(this.mouse.abstractCreature.pos);
+            }
+            else
+            {
+                WorldCoordinate destination = this.creature.abstractAI.parent.pos;
+
+                if (this.behavior == Behavior.Flee)
+                {
+                    destination = base.threatTracker.FleeTo(this.mouse.abstractCreature.pos, 10, 30, true);
+
+                    // Scan the room to see if it can turn and retaliate with a spear throw while fleeing
+                    for (int j = 0; j < base.tracker.CreaturesCount; j++)
+                    {
+                        Tracker.CreatureRepresentation threatRep = base.tracker.GetRep(j);
+                        AbstractCreature absThreat = threatRep?.representedCreature;
+
+                        if (absThreat?.realizedCreature is not Creature threat || base.threatTracker.GetThreatCreature(absThreat) == null)
+                        {
+                            continue;
+                        }
+
+                        if (threat.bodyChunks.Length == 0) continue;
+
+                        // Pick a random body chunk target on the threat to aim at
+                        int targetChunkIndex = UnityEngine.Random.Range(0, threat.bodyChunks.Length);
+
+                        // Calculate the mouse's counter-attack chance based on its personality
+                        float attackChance = Mathf.Lerp(0.035f, 0.1f, this.creature.personality.aggression);
+
+                        if (this.HasLethal(threat) &&
+                            this.GoodAttackPos(threatRep, targetChunkIndex) &&
+                            UnityEngine.Random.value < attackChance)
+                        {
+                            BodyChunk targetChunk = threat.bodyChunks[targetChunkIndex];
+                            float horizontalDelta = targetChunk.pos.x - this.mouse.firstChunk.pos.x;
+
+                            // Mark a directional flag (-1 for left, 1 for right) to throw at the target
+                            this.data.ThrowAtTarget = (int)Mathf.Sign(horizontalDelta);
+                        }
+                    }
+                }
+                else if (this.behavior == Behavior.Follow)
+                {
+                    destination = base.friendTracker.friendDest;
+                }
+                else if (this.behavior == Behavior.GrabItem)
+                {
+                    if (this.data.GrabTarget != null)
+                    {
+                        destination = this.data.GrabTarget.abstractPhysicalObject.pos;
+                    }
+                }
+                else if (this.behavior == Behavior.Attack)
+                {
+                    this.AttackUpdate(
+                        ref destination,
+                        this.AttackingThreat() ?
+                            base.threatTracker.mostThreateningCreature :
+                            base.preyTracker.MostAttractivePrey
+                    );
+                }
+                else if (this.behavior == Behavior.Idle)
+                {
+                    if (this.data.abstractAI.ToldToStay != null)
+                    {
+                        destination = this.data.abstractAI.ToldToStay.Value;
+                    }
+                    else
+                    {
+                        /*
+                        TODO: Idle behavior logic
+                        WorldCoordinate? worldCoordinate = this.IdleBehavior();
+                        if (worldCoordinate != null)
+                        {
+                            this.lastIdleSpot = new WorldCoordinate?(worldCoordinate.Value);
+                        }
+                        if (this.lastIdleSpot != null)
+                        {
+                            destination = this.lastIdleSpot.Value;
+                        }
+                        */
+                    }
+                }
+                this.creature.abstractAI.SetDestination(destination);
+            }
+        }
+
+        private bool CanGrabItem(PhysicalObject obj)
+        {
+            bool hasFreeGrasp = this.mouse.grasps == null || this.mouse.grasps.Any(g => g == null);
+            bool isBeingHeld = obj.grabbedBy.Count > 0;
+            bool isCloseEnough = Vector2.Distance(this.mouse.mainBodyChunk.pos, obj.firstChunk.pos) < 40f;
+
+            return hasFreeGrasp && isCloseEnough && !isBeingHeld;
+        }
+
+        private void DefineFollowCloseness()
+        {
+            // If our companion is in a completely different room, make following them a priority
+            if (base.friendTracker.friend.room != this.mouse.room)
+            {
+                this.data.FollowCloseness = 1f;
+                return;
+            }
+
+            // How distracted is the mouse? Scales up to 2000 frames
+            float playFactor = (float)this.data.ToldToPlay / 2000f;
+
+            // How long has the mouse been in the current room? Scales up to 6000 frames
+            float roomComfortFactor = (float)Mathf.Clamp(this.timeInRoom, 0, 6000) / 6000f;
+
+            // Is there an active threat nearby? Threat level is heavily amplified
+            float fearFactor = base.threatTracker.ThreatOfArea(this.creature.pos, false) * 3f;
+
+            // Combine the modifiers into a single distraction score
+            float distractionScore = playFactor + roomComfortFactor + fearFactor;
+
+            // Clamp the total distraction between -1 and 1
+            float clampedDistraction = Mathf.Clamp(distractionScore, -1f, 1f);
+
+            // Invert the value. High distraction means low follow closeness.
+            // High fear means a negative distraction score, which turns into maximum (1f) closeness.
+            this.data.FollowCloseness = Mathf.Clamp01(1f - clampedDistraction);
+        }
+
+        private void DecideBehavior()
+        {
+            if (this.mouse.grabbedBy.Count > 0 && this.mouse.grabbedBy[0].grabber is Player)
+            {
+                this.behavior = Behavior.HeldByPlayer;
+                return;
+            }
+
+            /*
+            TODO: Handle mouse on back
+            if (this.mouse.onBack != null)
+            {
+                this.behavior = Behavior.OnHead;
+                return;
+            }
+            */
+
+            /*
+            TODO: Handle thrown behavior
+            if (this.behavior == Behavior.Thrown && this.mouse.bodyMode == Player.BodyModeIndex.Default)
+            {
+                return;
+            }
+            */
+
+            // Update the utility tracker weights based on our current situation and personality,
+            // so that the utility comparer can make informed decisions about which behavior to pick.
+            this.UpdateUtilityTrackerWeights();
+
+            // Check which AI module has the highest utility and switch behavior based on that
+            AIModule aiModule = base.utilityComparer.HighestUtilityModule();
+            float highestUtility = base.utilityComparer.HighestUtility();
+
+            if (aiModule != null && highestUtility > 0.2f)
+            {
+                if (aiModule is ThreatTracker)
+                {
+                    if (this.AttackingThreat())
+                    {
+                        this.behavior = Behavior.Attack;
+                    }
+                    else
+                    {
+                        this.behavior = Behavior.Flee;
+                    }
+                }
+                else if (aiModule is FriendTracker && this.data.abstractAI.ToldToStay == null)
+                {
+                    this.behavior = Behavior.Follow;
+                }
+                else if (aiModule is PreyTracker && (aiModule as PreyTracker).MostAttractivePrey != null)
+                {
+                    this.behavior = Behavior.Attack;
+                }
+            }
+            else
+            {
+                this.behavior = (
+                    (
+                        base.friendTracker.friend != null &&
+                        this.data.FollowCloseness > 0f &&
+                        this.data.abstractAI.ToldToStay == null
+                    ) ? Behavior.Follow : Behavior.Idle
                 );
             }
 
-            this.creature.abstractAI.SetDestination(data.Destination);
-        }
+            // If we have a grab target and our utility is low or we're currently following, switch to the GrabItem behavior to prioritize picking up the item
+            if (this.data.GrabTarget != null && (highestUtility <= 0.2f || this.behavior == Behavior.Follow))
+            {
+                this.behavior = Behavior.GrabItem;
+            }
 
-        private void DecideBehavior(ref MouseFriendData data)
-        {
+            /*
+            DELETE
             if (data.GrabTarget != null && base.threatTracker.Utility() < 0.2f && base.rainTracker.Utility() < 0.2f)
             {
                 // First, check if the gift reachable
@@ -239,41 +442,110 @@ namespace MouseFriends.AI
                     }
                 }
             }
+            */
         }
 
-        private WorldCoordinate AttackUpdate(ref MouseFriendData data, Tracker.CreatureRepresentation target)
+        // Updates the weights of the utility trackers based on the mouse's current situation and personality traits
+        private void UpdateUtilityTrackerWeights()
         {
-            if (target != null && target.representedCreature != null && target.representedCreature.realizedCreature != null)
+            var preyTracker = base.utilityComparer.GetUtilityTracker(base.preyTracker);
+            var friendTracker = base.utilityComparer.GetUtilityTracker(base.friendTracker);
+            var threatTracker = base.utilityComparer.GetUtilityTracker(base.threatTracker);
+
+            var personality = this.mouse.abstractCreature.personality;
+            bool isToldToStay = data.abstractAI.ToldToStay != null;
+
+            float rawPreyWeight = 0f;
+
+            if (isToldToStay)
             {
-                if (
-                    this.WantsToEatThis(target.representedCreature.realizedCreature) &&
-                    (
-                        base.pathFinder.CoordinateReachable(target.BestGuessForPosition()) ||
-                        this.NearestLethalWeapon(target.representedCreature.realizedCreature) == null
-                    )
-                )
+                rawPreyWeight = 0f; // Won't hunt if told to wait
+            }
+            else if (this.data.IsFull)
+            {
+                // When full, more aggressive creatures might still hunt
+                float aggressionFactor = Mathf.Lerp(0.6f, 1f, personality.aggression);
+                rawPreyWeight = Mathf.Lerp(0f, 0.4f, aggressionFactor);
+            }
+            else
+            {
+                // If hungry, baseline is 1f, reduced if we have a friend to follow
+                float socialDistraction = (base.friendTracker != null) ? Mathf.Clamp01(1f - this.data.FollowCloseness) : 1f;
+                rawPreyWeight = socialDistraction - (base.friendTracker.Urgency * 0.5f);
+            }
+
+            float sympathyDampener = Mathf.InverseLerp(0.95f, 0.65f, personality.sympathy);
+            preyTracker.weight = rawPreyWeight * sympathyDampener;
+
+            // Calculate friend social urgency
+            friendTracker.weight = isToldToStay ? 0f : this.data.FollowCloseness;
+
+            // Calculate threat safety urgency
+            bool threatIsUnreachable = false;
+            var mostThreatening = base.threatTracker.mostThreateningCreature;
+
+            if (mostThreatening?.representedCreature?.abstractAI?.RealAI?.pathFinder is PathFinder threatPath)
+            {
+                if (!threatPath.CoordinateReachable(this.data.abstractAI.parent.pos))
                 {
-                    data.Destination = target.BestGuessForPosition();
-                }
-                else if (!this.HasLethal(target.representedCreature.realizedCreature))
-                {
-                    data.GrabTarget = this.NearestLethalWeapon(target.representedCreature.realizedCreature);
-                    data.Destination = ((data.GrabTarget != null) ? data.GrabTarget.abstractPhysicalObject.pos : data.Destination);
-                }
-                else
-                {
-                    this.FindAttackPosition(ref data, target);
-                    data.Destination = data.AttackPos;
-                    int num = UnityEngine.Random.Range(0, target.representedCreature.realizedCreature.bodyChunks.Length - 1);
-                    if (this.GoodAttackPos(target, num))
-                    {
-                        BodyChunk bodyChunk = target.representedCreature.realizedCreature.bodyChunks[num];
-                        data.ThrowAtTarget = (int)Mathf.Sign(bodyChunk.pos.x - this.mouse.firstChunk.pos.x);
-                    }
+                    threatIsUnreachable = true;
                 }
             }
 
-            return data.Destination;
+            if (threatIsUnreachable)
+            {
+                // If the threat can't reach us, calculate the fear weight based on bravery
+                threatTracker.weight = 0.75f - 0.7f * Mathf.Pow(personality.bravery, 0.5f);
+            }
+            else
+            {
+                // The threat can reach us
+                threatTracker.weight = 1f;
+            }
+        }
+
+        private WorldCoordinate AttackUpdate(ref WorldCoordinate coord, Tracker.CreatureRepresentation target)
+        {
+            if (target?.representedCreature?.realizedCreature is not Creature targetCrit)
+            {
+                return coord;
+            }
+
+            // If we want to eat this creature, go towards it provided we can pathfind to it,
+            // or if there are no weapons nearby to grab first.
+            if (this.WantsToEatThis(targetCrit) &&
+               (base.pathFinder.CoordinateReachable(target.BestGuessForPosition()) || this.NearestLethalWeapon(targetCrit) == null))
+            {
+                coord = target.BestGuessForPosition();
+                return coord;
+            }
+
+            // If we doesn't possess a lethal weapon, search for the nearest weapon
+            if (!this.HasLethal(targetCrit))
+            {
+                data.GrabTarget = this.NearestLethalWeapon(targetCrit);
+
+                // Head towards the weapon if found, otherwise hold current position
+                coord = (data.GrabTarget != null) ? data.GrabTarget.abstractPhysicalObject.pos : coord;
+                return coord;
+            }
+
+            // We have a weapon, so evaluate a throwing position
+            this.FindAttackPosition(target);
+            coord = this.data.AttackPos;
+
+            if (targetCrit.bodyChunks.Length > 0)
+            {
+                int randomChunkIndex = UnityEngine.Random.Range(0, targetCrit.bodyChunks.Length);
+
+                if (this.GoodAttackPos(target, randomChunkIndex))
+                {
+                    BodyChunk targetChunk = targetCrit.bodyChunks[randomChunkIndex];
+                    float horizontalDelta = targetChunk.pos.x - this.mouse.firstChunk.pos.x;
+                }
+            }
+
+            return coord;
         }
 
         private bool AttackingThreat()
@@ -442,11 +714,11 @@ namespace MouseFriends.AI
         public bool WantsToEatThis(PhysicalObject obj)
         {
             // The mouse won't want to eat anything if it's already full
-            if (this.mouse.IsFull()) return false;
+            if (this.data.IsFull) return false;
 
             // The mouse will eat anything that is explicitly edible
             if (obj is IPlayerEdible edibleItem && edibleItem.Edible) return true;
-            
+
             // The mouse will consider "edible" any corpse with meat left on it that's edible by a Slugcat player in the room
             if (obj is Creature critter && critter.dead && this.TheoreticallyEatMeat(critter, false)) return true;
 
@@ -573,15 +845,15 @@ namespace MouseFriends.AI
             this.TheoreticallyEatMeat(base.preyTracker.MostAttractivePrey.representedCreature.realizedCreature, true);
         }
 
-        private void FindAttackPosition(ref MouseFriendData data, Tracker.CreatureRepresentation target)
+        private void FindAttackPosition(Tracker.CreatureRepresentation target)
         {
             Room currentRoom = this.mouse.room;
             IntVector2 targetTile = target.BestGuessForPosition().Tile;
-            
+
             // Populate the target position list
             if (target.representedCreature.creatureTemplate.PreBakedPathingIndex < 0)
             {
-                data.List = new List<IntVector2>
+                this.data.List = new List<IntVector2>
                 {
                     target.BestGuessForPosition().Tile
                 };
@@ -594,17 +866,17 @@ namespace MouseFriends.AI
                     target.BestGuessForPosition().Tile,
                     20,
                     500,
-                    data.List
+                    this.data.List
                 );
             }
-            
+
             // Select a target tile coordinate
             IntVector2 pos;
             bool processFloodFillList = UnityEngine.Random.value < 0.5f && data.List.Count > 0;
 
             if (processFloodFillList)
             {
-                IntVector2 randomListTile = data.List[UnityEngine.Random.Range(0, data.List.Count)];
+                IntVector2 randomListTile = this.data.List[UnityEngine.Random.Range(0, this.data.List.Count)];
                 pos = randomListTile;
 
                 int stepDirection = (UnityEngine.Random.value >= 0.5f) ? 1 : -1;
@@ -613,7 +885,7 @@ namespace MouseFriends.AI
                 for (int i = 0; i < 40; i++)
                 {
                     IntVector2 checkTile = randomListTile + new IntVector2(stepDirection * i, 0);
-                    
+
                     if (currentRoom.HasAnySolid(checkTile))
                     {
                         break;  // Hit a wall
@@ -643,8 +915,8 @@ namespace MouseFriends.AI
             // Evaluate the candidate coordinate and switch to it if it's better than the current test position
             if (base.pathFinder.CoordinateViable(checkCoord))
             {
-                float candidateScore = this.SpearThrowPositionScore(ref data, checkCoord, targetTile, data.List);
-                float currentTestScore = this.SpearThrowPositionScore(ref data, data.TestThrowPos, targetTile, data.List);
+                float candidateScore = this.SpearThrowPositionScore(checkCoord, targetTile, this.data.List);
+                float currentTestScore = this.SpearThrowPositionScore(this.data.TestThrowPos, targetTile, this.data.List);
 
                 if (candidateScore > currentTestScore)
                 {
@@ -653,8 +925,8 @@ namespace MouseFriends.AI
             }
 
             // Evaluate whether we should switch our active attack position to the test position
-            float testPosScore = this.SpearThrowPositionScore(ref data, data.TestThrowPos, targetTile, data.List);
-            float activePosScore = this.SpearThrowPositionScore(ref data, data.AttackPos, targetTile, data.List);
+            float testPosScore = this.SpearThrowPositionScore(this.data.TestThrowPos, targetTile, this.data.List);
+            float activePosScore = this.SpearThrowPositionScore(this.data.AttackPos, targetTile, this.data.List);
 
             bool isStuckAtCurrent = Custom.ManhattanDistance(this.creature.pos, data.AttackPos) < 3;
             bool isTestPosSignificantlyBetter = testPosScore > activePosScore + (float)data.ChangeAttackPositionDelay;
@@ -682,7 +954,6 @@ namespace MouseFriends.AI
         }
 
         private float SpearThrowPositionScore(
-            ref MouseFriendData data,
             WorldCoordinate candidatePos,
             IntVector2 targetPosition,
             List<IntVector2> targetMovementArea
@@ -695,7 +966,7 @@ namespace MouseFriends.AI
             }
 
             Room currentRoom = this.mouse.room;
-            
+
             // IMPORTANT: Ensure that this creature template works
             QuickConnectivity.FloodFill(
                 currentRoom,
@@ -703,7 +974,7 @@ namespace MouseFriends.AI
                 candidatePos.Tile,
                 40,
                 500,
-                data._CachedFloodFillList
+                this.data._CachedFloodFillList
             );
 
             // Find the vertical bounds of the target's movement area
@@ -717,7 +988,7 @@ namespace MouseFriends.AI
             }
 
             float positionScore = 0f;
-            
+
             // Calculate the initial line-of-sight and spear trajectory score
             foreach (IntVector2 fillTile in data._CachedFloodFillList)
             {
@@ -740,7 +1011,7 @@ namespace MouseFriends.AI
             // Set baseline score weights based on initial tactical advantage
             if (positionScore == 0f)
             {
-                positionScore = 1f;     // Minimum score for having line of sight but no clear horizontal lanes 
+                positionScore = 1f;     // Minimum score for having line of sight but no clear horizontal lanes
             }
             else
             {
@@ -756,7 +1027,7 @@ namespace MouseFriends.AI
                     break;
                 }
             }
-            
+
             // Double the score if it moves us toward our pathfinder destination
             if (base.pathFinder.GetDestination.room == this.creature.pos.room)
             {
@@ -771,7 +1042,7 @@ namespace MouseFriends.AI
                     }
                 }
             }
-            
+
             // Distance & safety dampening factors
             float currentDistance = candidatePos.Tile.FloatDist(targetPosition);
 
@@ -794,11 +1065,11 @@ namespace MouseFriends.AI
             {
                 positionScore *= 0.1f;
             }
-            
+
             // Deduct points if this position overlaps with where the mouse recently stood
-            for (int n = 1; n < data.PreviousAttackPositions.Count; n++)
+            for (int n = 1; n < this.data.PreviousAttackPositions.Count; n++)
             {
-                float historyDistance = candidatePos.Tile.FloatDist(data.PreviousAttackPositions[n]);
+                float historyDistance = candidatePos.Tile.FloatDist(this.data.PreviousAttackPositions[n]);
                 positionScore -= Custom.LerpMap(historyDistance, 0f, 5f, 50f, 0f);
             }
 
@@ -851,22 +1122,8 @@ namespace MouseFriends.AI
             return false;
         }
 
-        private void NPCForceGrab(PhysicalObject obj)
-        {
-            for (int i = 0; i < this.mouse.grasps.Length; i++)
-            {
-                if (this.mouse.grasps[i] == null)
-                {
-                    this.mouse.Grab(obj, i, 0, Creature.Grasp.Shareability.CanNotShare, 0, false, false);
-                    break;
-                }
-            }
-        }
-
         private void Communicate(Player player)
         {
-            if (this.mouse.GetFriendData() is not MouseFriendData data) return;
-
             Player.InputPackage[] input = player.input;
             if (input[0].jmp && !input[1].jmp && player.bodyMode != Player.BodyModeIndex.Default)
             {
@@ -886,7 +1143,7 @@ namespace MouseFriends.AI
 
             for (int i = 0; i < this.mouse.grasps.Length; i++)
             {
-                if (this.mouse.grasps[i] != null && this.mouse.grasps[i].grabbed == obj)
+                if (this.mouse.grasps[i]?.grabbed == obj)
                 {
                     return true;
                 }
@@ -910,17 +1167,15 @@ namespace MouseFriends.AI
 
         public void GiftRecieved(SocialEventRecognizer.OwnedItemOnGround giftOfferedToMe)
         {
-            SocialMemory.Relationship orInitiateRelationship = this.creature.realizedCreature.State.socialMemory.GetOrInitiateRelationship(giftOfferedToMe.owner.abstractCreature.ID);
             if (giftOfferedToMe.owner is Player)
             {
+                SocialMemory.Relationship orInitiateRelationship =
+                    this.creature.realizedCreature.State.socialMemory
+                    .GetOrInitiateRelationship(giftOfferedToMe.owner.abstractCreature.ID);
+
                 orInitiateRelationship.InfluenceLike(1f);
                 orInitiateRelationship.InfluenceTempLike(1f);
             }
-            Console.WriteLine("Relationship:");
-            Console.WriteLine(new string[]
-            {
-                orInitiateRelationship.ToString()
-            });
 
             // DEBUG
             /*
@@ -1004,11 +1259,12 @@ namespace MouseFriends.AI
 
         internal new class Behavior : MouseAI.Behavior
         {
+            internal static readonly MouseAI.Behavior Follow = new MouseAI.Behavior("Follow", register: true);
             internal static readonly MouseAI.Behavior GrabItem = new MouseAI.Behavior("GrabItem", register: true);
             internal static readonly MouseAI.Behavior Eat = new MouseAI.Behavior("Eat", register: true);
+            internal static readonly MouseAI.Behavior HeldByPlayer = new MouseAI.Behavior("HeldByPlayer", register: true);
             internal static readonly MouseAI.Behavior OnHead = new MouseAI.Behavior("OnHead", register: true);
-            internal static readonly MouseAI.Behavior BeingHeld = new MouseAI.Behavior("BeingHeld", register: true);
-            internal static readonly MouseAI.Behavior Attacking = new MouseAI.Behavior("Attacking", register: true);
+            internal static readonly MouseAI.Behavior Attack = new MouseAI.Behavior("Attack", register: true);
 
             internal Behavior(string value, bool register = false) : base(value, register) {}
         }
