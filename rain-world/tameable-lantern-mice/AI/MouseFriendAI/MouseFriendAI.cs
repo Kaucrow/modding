@@ -9,14 +9,15 @@ using UnityEngine;
 
 namespace MouseFriends.AI
 {
-    internal class MouseFriendAI : MouseAI, IUseItemTracker, FriendTracker.IHaveFriendTracker, IReactToSocialEvents
+    internal partial class MouseFriendAI : MouseAI, IUseItemTracker, FriendTracker.IHaveFriendTracker, IReactToSocialEvents,
+        IUseARelationshipTracker
     {
         // DEBUG
         /*
         private WorldCoordinate? travelTo = null;
         */
 
-        private readonly MouseFriendData data;
+        public readonly MouseFriendData data;
 
         public MouseFriendAI(AbstractCreature creature, World world, MouseFriendData data) : base(creature, world)
         {
@@ -216,6 +217,8 @@ namespace MouseFriends.AI
                 }
             }
 
+            UnityEngine.Debug.Log("Current behavior: " + this.behavior);
+
             // If we're being held by the player and are tamed, keep the current position
             // TODO: Handle held but not tamed
             if (this.behavior == Behavior.HeldByPlayer && this.mouse.IsBefriended())
@@ -274,6 +277,12 @@ namespace MouseFriends.AI
                 }
                 else if (this.behavior == Behavior.Attack)
                 {
+                    UnityEngine.Debug.Log("Attacking target: " + (
+                        this.AttackingThreat() ?
+                            base.threatTracker.mostThreateningCreature?.representedCreature?.realizedCreature?.GetType().Name :
+                            base.preyTracker.MostAttractivePrey?.representedCreature?.realizedCreature?.GetType().Name
+                    ));
+
                     this.AttackUpdate(
                         ref destination,
                         this.AttackingThreat() ?
@@ -303,8 +312,24 @@ namespace MouseFriends.AI
                         */
                     }
                 }
+
                 this.creature.abstractAI.SetDestination(destination);
             }
+        }
+
+        public bool WantsToEatThis(PhysicalObject obj)
+        {
+            // The mouse won't want to eat anything if it's already full
+            if (this.data.IsFull) return false;
+
+            // The mouse will eat anything that is explicitly edible
+            if (obj is IPlayerEdible edibleItem && edibleItem.Edible) return true;
+
+            // The mouse will consider "edible" any corpse with meat left on it that's edible by a Slugcat player in the room
+            if (obj is Creature critter && critter.dead && this.TheoreticallyEatMeat(critter, false)) return true;
+
+            // Return false if no condition was met
+            return false;
         }
 
         private bool CanGrabItem(PhysicalObject obj)
@@ -506,10 +531,14 @@ namespace MouseFriends.AI
 
         private WorldCoordinate AttackUpdate(ref WorldCoordinate coord, Tracker.CreatureRepresentation target)
         {
+            UnityEngine.Debug.Log("AttackUpdate called. Evaluating target: " + target?.representedCreature?.realizedCreature?.GetType().Name);
+
             if (target?.representedCreature?.realizedCreature is not Creature targetCrit)
             {
                 return coord;
             }
+
+            UnityEngine.Debug.Log("Target is a valid creature: " + targetCrit.GetType().Name);
 
             // If we want to eat this creature, go towards it provided we can pathfind to it,
             // or if there are no weapons nearby to grab first.
@@ -552,10 +581,13 @@ namespace MouseFriends.AI
         {
             for (int i = 0; i < base.relationshipTracker.relationships.Count; i++)
             {
+                // TODO: IMPORTANT: FIX MOUSE FRIEND TRACK STATE BEING NULL
                 MouseFriendAI.MouseFriendTrackState mouseFriendTrackState =
                     base.relationshipTracker.relationships[i].state as MouseFriendAI.MouseFriendTrackState;
 
                 Tracker.CreatureRepresentation trackerRep = base.relationshipTracker.relationships[i].trackerRep;
+
+                UnityEngine.Debug.Log("TrackerRep creature: " + trackerRep?.representedCreature?.realizedCreature?.GetType().Name);
 
                 if (
                     base.threatTracker.mostThreateningCreature == trackerRep &&
@@ -709,21 +741,6 @@ namespace MouseFriends.AI
                 }
                 return 0f;
             }
-        }
-
-        public bool WantsToEatThis(PhysicalObject obj)
-        {
-            // The mouse won't want to eat anything if it's already full
-            if (this.data.IsFull) return false;
-
-            // The mouse will eat anything that is explicitly edible
-            if (obj is IPlayerEdible edibleItem && edibleItem.Edible) return true;
-
-            // The mouse will consider "edible" any corpse with meat left on it that's edible by a Slugcat player in the room
-            if (obj is Creature critter && critter.dead && this.TheoreticallyEatMeat(critter, false)) return true;
-
-            // Return false if no condition was met
-            return false;
         }
 
         private bool TheoreticallyEatMeat(Creature crit, bool excludeCentipedes)
@@ -1149,112 +1166,6 @@ namespace MouseFriends.AI
                 }
             }
             return false;
-        }
-
-        public bool TrackItem(AbstractPhysicalObject obj)
-        {
-            return obj.realizedObject == null || !(obj.realizedObject is Weapon) || (obj.realizedObject as Weapon).mode != Weapon.Mode.StuckInWall;
-        }
-
-        public void SeeThrownWeapon(PhysicalObject obj, Creature thrower)
-        {
-            if (base.tracker.RepresentationForObject(thrower, false) == null)
-            {
-                base.noiseTracker.mysteriousNoises += 20f;
-                base.noiseTracker.mysteriousNoiseCounter = 200;
-            }
-        }
-
-        public void GiftRecieved(SocialEventRecognizer.OwnedItemOnGround giftOfferedToMe)
-        {
-            if (giftOfferedToMe.owner is Player)
-            {
-                SocialMemory.Relationship orInitiateRelationship =
-                    this.creature.realizedCreature.State.socialMemory
-                    .GetOrInitiateRelationship(giftOfferedToMe.owner.abstractCreature.ID);
-
-                orInitiateRelationship.InfluenceLike(1f);
-                orInitiateRelationship.InfluenceTempLike(1f);
-            }
-
-            // DEBUG
-            /*
-            this.travelTo = giftOfferedToMe.item.abstractPhysicalObject.pos;
-            */
-        }
-
-        public void SocialEvent(SocialEventRecognizer.EventID ID, Creature subjectCrit, Creature objectCrit, PhysicalObject involvedItem)
-        {
-            if (
-                subjectCrit != null && objectCrit != null &&
-                subjectCrit.abstractCreature.rippleLayer != objectCrit.abstractCreature.rippleLayer &&
-                !subjectCrit.abstractCreature.rippleBothSides && !objectCrit.abstractCreature.rippleBothSides
-            )
-            {
-                return;
-            }
-
-            Tracker.CreatureRepresentation creatureRepresentation = base.tracker.RepresentationForObject(subjectCrit, false);
-            if (creatureRepresentation == null)
-            {
-                return;
-            }
-
-            Tracker.CreatureRepresentation creatureRepresentation2 = null;
-            bool flag = objectCrit == this.mouse;
-            if (!flag)
-            {
-                creatureRepresentation2 = base.tracker.RepresentationForObject(objectCrit, false);
-                if (creatureRepresentation2 == null)
-                {
-                    return;
-                }
-            }
-
-            if (!flag && this.mouse.dead)
-            {
-                return;
-            }
-
-            if (creatureRepresentation2 != null && creatureRepresentation.TicksSinceSeen > 40 && creatureRepresentation2.TicksSinceSeen > 40)
-            {
-                return;
-            }
-
-            if (
-                (ID == SocialEventRecognizer.EventID.LethalAttack || ID == SocialEventRecognizer.EventID.Killing)
-                && objectCrit is Player && subjectCrit.abstractCreature.creatureTemplate.type != CreatureTemplate.Type.LanternMouse
-            )
-            {
-                for (int i = 0; i < base.relationshipTracker.relationships.Count; i++)
-                {
-                    if (base.relationshipTracker.relationships[i].trackerRep != null && base.relationshipTracker.relationships[i].trackerRep.representedCreature != null && base.relationshipTracker.relationships[i].trackerRep.representedCreature.realizedCreature == subjectCrit)
-                    {
-                        // TODO: Implement hurtAFriend
-                        //(base.relationshipTracker.relationships[i].state as SlugNPCAI.SlugNPCTrackState).hurtAFriend = true;
-                    }
-                }
-            }
-
-            if (
-                ID == SocialEventRecognizer.EventID.ItemOffering &&
-                subjectCrit.abstractCreature.creatureTemplate.type == CreatureTemplate.Type.Slugcat &&
-                !(involvedItem is Player) && objectCrit == this.mouse
-            )
-            {
-                if (involvedItem.room.abstractRoom.name == "SL_AI" && involvedItem.firstChunk.pos.x > 1150f)
-                {
-                    Console.WriteLine(new string[]
-                    {
-                        "Reject gift due to moon proximity"
-                    });
-                    return;
-                }
-                else
-                {
-                    base.friendTracker.giftOfferedToMe = involvedItem.room.socialEventRecognizer.ItemOwnership(involvedItem);
-                }
-            }
         }
 
         internal new class Behavior : MouseAI.Behavior

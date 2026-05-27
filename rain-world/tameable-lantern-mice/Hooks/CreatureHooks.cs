@@ -80,11 +80,15 @@ namespace MouseFriends.Hooks
                 self.grasps[0].grabbedChunk.MoveFromOutsideMyUpdate(eu, self.bodyChunks[0].pos);
                 self.grasps[0].grabbedChunk.vel = self.mainBodyChunk.vel;
 
+                // --- THROW LOGIC ---
+                if (friendData.ThrowAtTarget != 0)
+                {
+                    // Trigger object throw
+                    self.Throw();
+                }
                 // --- EATING LOGIC ---
-                // In an else block because we don't want to try to eat if the item is stuck on geometry and we're trying to drop it
-
                 // Check if the held item is edible, and if so, take a bite every 40 frames
-                if (
+                else if (
                     self.grasps[0].grabbed is IPlayerEdible foodItem && self.room.game.clock % 40 == 0 &&
                     foodItem is PhysicalObject physFood && self.room != null
                 )

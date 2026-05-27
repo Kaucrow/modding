@@ -78,8 +78,8 @@ public partial class MouseFriendsMod : BaseUnityPlugin
 
     private void RegisterHooks()
     {
-        On.Player.Update += PlayerOnUpdate;
-        On.Player.Jump += PlayerActivateMark;
+        //On.Player.Update += PlayerOnUpdate;
+        //On.Player.Jump += PlayerActivateMark;
         GraphicsHooks.Apply();
         AIHooks.Apply();
         CreatureHooks.Apply();
@@ -90,8 +90,8 @@ public partial class MouseFriendsMod : BaseUnityPlugin
     private void UnregisterHooks()
     {
         On.RainWorld.OnModsInit -= RainWorldOnOnModsInit;
-        On.Player.Update -= PlayerOnUpdate;
-        On.Player.Jump -= PlayerActivateMark;
+        //On.Player.Update -= PlayerOnUpdate;
+        //On.Player.Jump -= PlayerActivateMark;
         GraphicsHooks.Remove();
         AIHooks.Remove();
         CreatureHooks.Remove();

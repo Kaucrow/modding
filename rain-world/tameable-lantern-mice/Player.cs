@@ -6,12 +6,12 @@ using MoreSlugcats;
 
 namespace MouseFriendsMod;
 
-public partial class MouseFriendsMod 
+public partial class MouseFriendsMod
 {
     private void PlayerOnDie(On.Player.orig_Die orig, Player self)
     {
         bool wasAlive = !self.dead;
-    
+
         orig(self);
 
         if (!wasAlive || self.isNPC || self.room == null) return;
@@ -25,7 +25,7 @@ public partial class MouseFriendsMod
     {
         // Convert to precise tile coordinates
         IntVector2 tilePos = room.GetTilePosition(pixelPos);
-        
+
         // Find nearest valid air tile (with 5-tile radius search)
         if (room.GetTile(tilePos).Solid)
         {
@@ -53,7 +53,7 @@ public partial class MouseFriendsMod
 
         // Create with precise world coordinate
         WorldCoordinate spawnCoord = new WorldCoordinate(room.abstractRoom.index, tilePos.x, tilePos.y, -1);
-        
+
         var abstractBomb = new AbstractPhysicalObject(
             room.world,
             DLCSharedEnums.AbstractObjectType.SingularityBomb,
@@ -64,17 +64,17 @@ public partial class MouseFriendsMod
 
         // Add to room
         room.abstractRoom.AddEntity(abstractBomb);
-        
+
         // Realize and force position
         abstractBomb.RealizeInRoom();
-        
+
         if (abstractBomb.realizedObject is SingularityBomb bomb)
         {
             // Convert back to precise pixel position
             Vector2 spawnPos = room.MiddleOfTile(tilePos) + new Vector2(0, 20f);
             bomb.firstChunk.HardSetPosition(spawnPos);
             bomb.firstChunk.lastPos = spawnPos; // Prevent physics correction
-            
+
             Debug.Log($"Bomb spawned at {spawnPos} (world coord: {spawnCoord})");
 
             // owo
